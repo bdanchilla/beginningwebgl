@@ -1,0 +1,26 @@
+<!DOCTYPE html>
+<html>
+<head>
+
+<title>GLGE 2D Filters Demo</title>
+<script type="text/javascript" src="../../glge-compiled.js"></script>
+
+<style>
+body{margin:auto; background-color: #888; padding-top: 50px; font-family:sans; color: #666; font-size: 0.8em}
+#container{ margin:auto; width: 900px; padding: 10px; background-color: #fff; }
+</style>
+</head>
+<body>
+
+<div id="container">
+<canvas id="canvas" width="900" height="400"></canvas>
+<div id="details">
+<h2>GLGE 2D Filters Demo</h2>
+<p>The demo shows off GLGE new 2d filters, use the tick box below to view the scene with and without filters</p>
+<input type="checkbox" onclick="if(!this.checked) scene.setFilter2d(null); else scene.setFilter2d(filter);" checked> Turn Filters ON/OFF
+</div>
+<div id="debug"></div>
+
+<script type="text/javascript" src="2dfilterdemo.js"></script>
+</body>
+</html>

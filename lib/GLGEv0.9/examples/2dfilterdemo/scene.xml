@@ -1,0 +1,37 @@
+<?xml version="1.0"?>
+<glge>
+		<import url="groundMesh.xml" />
+		<material id="rocksnow" specular="0.1" shininess="2" color="#ddd" reflectivity="1.1">
+		<texture id="MAMaterial.001_TEXTURE5" src="terrain4.png" />
+		<texture id="MAMaterial.001_TEXTURE1" src="rock3.jpg" />
+		<material_layer texture="#MAMaterial.001_TEXTURE1" mapinput="UV1" scale_x="30" scale_y="30" mapto="M_COLOR" />
+		<material_layer texture="#MAMaterial.001_TEXTURE1" mapinput="UV1" scale_x="10" scale_y="10" alpha="0.5" mapto="M_COLOR" />
+		<material_layer texture="#MAMaterial.001_TEXTURE1" mapinput="UV1" scale_x="5" scale_y="5" alpha="0.5" mapto="M_COLOR" />
+		<texture id="MAMaterial.001_TEXTURE2" src="rocknorm.jpg" />
+		<material_layer texture="#MAMaterial.001_TEXTURE5" mapinput="UV1" scale_x="30" scale_y="30" mapto="M_NOR" />
+		<material_layer texture="#MAMaterial.001_TEXTURE5" mapinput="UV1" scale_x="10" scale_y="10" alpha="0.5" mapto="M_NOR" />
+		<material_layer texture="#MAMaterial.001_TEXTURE5" mapinput="UV1" scale_x="5" scale_y="5" alpha="0.5" mapto="M_NOR" />
+		<texture id="MAMaterial.001_TEXTURE6" src="shadowmap4.jpg" />
+		<material_layer texture="#MAMaterial.001_TEXTURE6" mapinput="UV1" scale_x="1" scale_y="1" mapto="M_COLOR" blend_mode="BL_MUL" />
+		
+		<material_layer texture="#MAMaterial.001_TEXTURE5" mapinput="UV1" scale_x="1" scale_y="1" mapto="M_MSKR" />
+		<texture id="MAMaterial.001_TEXTURE3" src="snow.jpg" />
+		<material_layer texture="#MAMaterial.001_TEXTURE3" mapinput="UV1" scale_x="10" scale_y="10" mapto="M_COLOR" />
+		<material_layer texture="#MAMaterial.001_TEXTURE3" mapinput="UV1" scale_x="5" scale_y="5" alpha="0.5" mapto="M_COLOR" />
+		<material_layer texture="#MAMaterial.001_TEXTURE3" mapinput="UV1" scale_x="1" scale_y="1" alpha="0.5" mapto="M_COLOR" />
+		<texture id="MAMaterial.001_TEXTURE4" src="snownorm.jpg" />
+		<material_layer texture="#MAMaterial.001_TEXTURE4" mapinput="UV1" scale_x="15" scale_y="15" mapto="M_NOR" />
+		<material_layer texture="#MAMaterial.001_TEXTURE6" mapinput="UV1" scale_x="1" scale_y="1" mapto="M_COLOR" blend_mode="BL_MUL" />
+		</material>
+		
+		<scene id="mainscene" ambient_color="#ccc" camera="#mainCamera" background_color="#00f">
+		
+			<camera id="mainCamera" rot_order="ROT_XZY" loc_z="3" loc_y="0" fov_y="35" rot_x="1.5" />
+			
+			<object id="groundObject" mesh="#groundMesh" material="#rocksnow" scale="2" />
+			<group id="eyetarget" loc_x="0" loc_y="7" loc_z="-100" />
+			
+			<light id="light" loc_x="3" loc_y="-100" loc_z="30" rot_x="3.7" attenuation_quadratic="0" attenuation_linear="0" color="#221" attenuation_constant="10" type="L_DIR" />
+			
+		</scene>
+	</glge>

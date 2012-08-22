@@ -1,0 +1,69 @@
+WHAT IS GLGE?
+
+GLGE is a javascript library intended to ease the use of WebGL; which is 
+basically a native browser javascript API giving direct access to openGL 
+ES2, allowing for the use of hardware accelerated 2D/3D applications 
+without having to download any plugins.
+
+The aim of GLGE is to mask the involved nature of WebGL from the web 
+developer, who can then spend his/her time creating richer content for 
+the web.
+
+LICENSE
+
+GLGE is made available under a BSD (3-point) style license
+
+BUILDING GLGE
+
+GLGE requires nodejs, to build simply:
+> git submodule init
+> git submodule update
+> ./build.js
+
+For more options:
+> ./build.js --help
+
+RUNNING THE EXAMPLES LOCALLY IN CHROME
+
+Chrome doesn't  support cross-origin requests which means running from a 
+file:/// url doesn't work. You can start a small webserver using Python:
+> cd /path/to/glge
+> python -m SimpleHTTPServer 1234
+
+Now open: http://localhost:1234/examples/
+
+SUPPORT
+
+For help and support:
+IRC: #glge on irc.freenode.net
+EMAIL: glge@googlegroups.com
+WEB: www.glge.org
+
+FEATURES
+
+1) Keyframe animation
+2) Perpixel lighting directional lights, spot lights and point lights
+3) Normal mapping
+4) Animated materials
+5) Skeletal animation(WIP)
+6) Collada format support
+7) Parallax Mapping
+8) Text rendering(probably bitmap)
+9) Fog
+10) Depth Shadows
+11) Shader based picking
+12) Environment mapping
+13) Reflections/Refractions
+14) Collada Animations
+15) 2d filters
+16) Culling
+17) LOD
+
+PLANNED ADDITIONS
+
+1) Shape keys
+2) Portals
+3) Physics
+7) primative creation
+
++ Much more!
