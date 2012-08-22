@@ -1,0 +1,95 @@
+<!doctype html>
+<html>
+	<head>
+		<title>three.js Torus</title>
+		<style>
+			body{ background-color: grey; }
+			canvas{ background-color: white; }
+		</style>
+        <script src="/beginningwebgl/code/lib/three.js/build/Three.js"></script>
+		<script>
+			var CANVAS_WIDTH = 400,
+				CANVAS_HEIGHT= 300;
+
+			var renderer = null,	//WebGL or 2D
+				scene = null,		//scene object
+				camera = null;		//camera object
+			
+			function initWebGL()
+			{
+				setupRenderer();
+				setupScene();
+				setupCamera();
+
+				renderer.render(scene, camera);
+			}
+
+			function setupRenderer()
+			{
+				var test_canvas = document.createElement('canvas');
+				var gl = null;
+				try{
+					gl = (	test_canvas.getContext("webgl") || 
+						  	test_canvas.getContext("experimental-webgl")
+						  );	
+				}catch(e){
+				}
+								
+				if(gl)
+				{
+					renderer = new THREE.WebGLRenderer();
+					console.log('webgl!');
+				}else{
+					renderer = new THREE.CanvasRenderer();
+					console.log('canvas');
+				}
+				test_canvas = undefined;
+
+				renderer.setSize( CANVAS_WIDTH, CANVAS_HEIGHT );
+				renderer.setClearColorHex(0x777777, 1.0);
+			
+				//where to add the canvas element
+				document.body.appendChild(  renderer.domElement );
+			}
+
+			function setupScene()
+			{
+				scene = new THREE.Scene();				
+				addMesh();
+				addLight();
+			}
+
+			function setupCamera()
+			{
+				camera = new THREE.PerspectiveCamera(
+				    35,         					// Field of view
+				    CANVAS_WIDTH / CANVAS_HEIGHT,  	// Aspect ratio
+				    .1,    						    // Near clip plane
+				    10000  					        // Far clip plane
+				);
+				camera.position.set( -15, 10, 10 );
+				camera.lookAt( scene.position );
+				scene.add( camera );
+			}
+
+			function addMesh()
+			{
+				var mesh = new THREE.Mesh( 
+					new THREE.TorusGeometry( 4, 1.5, 20, 20 ), 
+					new THREE.MeshLambertMaterial( { 
+						color: 0x0000FF 
+					 } )
+				);
+				scene.add(mesh);
+			}
+
+			function addLight()
+			{
+				var light = new THREE.PointLight( 0xFFFFFF );
+				light.position.set( 10, 10, 10 );
+				scene.add(light);
+			}
+		</script>
+	</head>
+	<body onload="initWebGL()"></body>
+</html>

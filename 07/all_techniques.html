@@ -1,0 +1,230 @@
+<!doctype html>
+<html>
+	<head>
+		<title>All Techniques of Ch4 with Three.JS though</title>
+		<style>
+			body{ background-color: grey; }
+			canvas{ background-color: white; }
+		</style>
+        <script src="//code.jquery.com/jquery.min.js"></script>
+        <script src="/beginningwebgl/code/lib/three.js/build/Three.js"></script>
+        <script>
+       		var CANVAS_WIDTH = 400,
+				CANVAS_HEIGHT= 300;
+
+			var renderer = null,	//WebGL or 2D
+				scene = null,		//scene object
+				camera = null;		//camera object
+			
+			var texture = [],
+				STONE_TEXTURE = 0,
+				GLASS_TEXTURE = 1,
+				WATER_TEXTURE = 2,
+				number_textures = 3,
+				loaded_textures = 0,					
+				meshes = [],
+				geometry = null,
+				NUM_SPHERES = 3,
+				PLANE_INDEX = 3,				
+				angle = 0,
+				paused = false;	
+
+			function initWebGL()
+			{
+				setupRenderer();
+				setupScene();
+				setupCamera();				
+
+				var original_mesh_x = [];
+				var original_mesh_z = [];
+				for(var i=0;i<meshes.length;++i)
+				{
+					original_mesh_x[i] = meshes[i].position.x;
+					original_mesh_z[i] = meshes[i].position.z;
+				}
+
+				(function animLoop(){
+					if(!paused){
+						//rotate meshes round y-axis
+						for(var i=0;i<meshes.length;++i)
+						{
+							if(i != PLANE_INDEX)
+							{
+								meshes[i].position.x = original_mesh_x[i] + Math.sin(angle);
+								meshes[i].position.z = original_mesh_z[i] + Math.cos(angle);
+								meshes[i].rotation.y = angle;
+							}else{
+								meshes[i].rotation.y = angle;
+							}
+							meshes[i].updateMatrix();
+						}	
+						angle += 0.01;
+
+						renderer.render(scene, camera);	
+					}
+					requestAnimationFrame( animLoop );
+				})();
+			}
+
+			function adjustLoadedTexture( tex )
+			{
+				loaded_textures++;
+
+				tex.wrapS = THREE.RepeatWrapping;
+				tex.wrapT = THREE.RepeatWrapping;				
+				tex.needsUpdate = true;							
+
+				if( loaded_textures == number_textures )
+				{
+					initWebGL();
+				}
+	
+			}
+
+			function setupTexture()
+			{	
+				var texture_files = [
+					"/beginningwebgl/code/textures/stone-256px.jpg",
+					"/beginningwebgl/code/textures/glass-256px.jpg",
+					"/beginningwebgl/code/textures/water-256px.jpg"
+				];
+
+				loaded_textures = 0;
+				for(var i=0; i<texture_files.length;++i)
+				{
+					texture[i] = THREE.ImageUtils.loadTexture(
+						texture_files[i], {}, adjustLoadedTexture
+					);
+				}	
+			}
+
+			function setupRenderer()
+			{
+				renderer = new THREE.WebGLRenderer( );		
+				renderer.setSize( CANVAS_WIDTH, CANVAS_HEIGHT );
+			
+				//where to add the canvas element
+				document.body.appendChild(  renderer.domElement );
+			}
+
+			function setupScene()
+			{
+				geometry = new THREE.Geometry();
+				scene = new THREE.Scene();		
+				scene.fog = new THREE.FogExp2( 0x775555, 0.11);
+				renderer.setClearColor( new THREE.Color(0x333333), 1 );
+
+				addLight();
+				addMesh();
+			}
+
+			function setupCamera()
+			{
+				camera = new THREE.PerspectiveCamera(
+				    45,         					// Field of view
+				    CANVAS_WIDTH / CANVAS_HEIGHT,  	// Aspect ratio
+				    .1,    						    // Near clip plane
+				    10000  					        // Far clip plane
+				);
+
+				camera.position.set( 0, 2.0, -8.0);
+				camera.lookAt( scene.position );
+				scene.add( camera );
+			}
+
+			function addMesh()
+			{
+				var translations = [
+					1.0, -0.75, 0.0,
+					0.0, 0.0, 1.0,
+					1.0, 0.25, -1.0
+				];
+
+				var colors = [
+					0xFFEEEE,
+					0xEEFFEE,
+					0x774422,
+					0xFFFFFF
+				];
+
+				for(var i=0; i<NUM_SPHERES; ++i)
+				{
+					if( i == 2 ){
+						tex = texture[GLASS_TEXTURE];					
+					}else{
+						tex = texture[STONE_TEXTURE];						
+					}
+
+					var material = new THREE.MeshPhongMaterial(
+							{ 	ambient: 0xffffff, 
+								color: colors[i], 
+								specular: 0x555555, 
+								shininess: 30,
+								map:  tex
+							}
+						);
+
+					if(i == 2)
+					{
+						material.blending = THREE.AdditiveBlending;
+						material.blendSrc = THREE.SrcAlphaFactor;
+						material.blendDst = THREE.OneFactor;
+						material.transparent = true;
+						material.depthTest = false;
+					}
+
+					meshes[i] = new THREE.Mesh( 
+						new THREE.SphereGeometry( 0.8, 30, 30 ), 
+						material
+					);
+					
+					var x = i*3;
+					meshes[i].translateX(translations[x]);
+					meshes[i].translateY(translations[x+1]);
+					meshes[i].translateZ(translations[x+2]);
+				}
+
+				meshes[PLANE_INDEX] = new THREE.Mesh( 
+					new THREE.PlaneGeometry( 10.0, 10.0 ), 
+					new THREE.MeshBasicMaterial(
+							{ 	map:  texture[WATER_TEXTURE]
+							}
+						)
+				);
+				meshes[PLANE_INDEX].translateY(-1.0);
+				meshes[PLANE_INDEX].rotation.x = 0.1;
+				
+				for(var i=0; i<meshes.length; ++i)
+				{
+					meshes[i].doubleSided = true;
+					scene.add(meshes[i]);
+				}
+			}
+
+			function addLight()
+			{
+				var ambientLight = new THREE.AmbientLight( 0x111111 );
+				scene.add(ambientLight);
+
+				var pointLight = new THREE.PointLight( 0xFFFFFF );
+				pointLight.position.set( 0, 10, 0 );
+				scene.add(pointLight);
+
+				var directionalLight = new THREE.DirectionalLight( 0xFFFFFF );
+				directionalLight.position.set( 1, 2, 1 ).normalize();
+				scene.add( directionalLight );
+			}
+
+			$(document).keyup(function(evt){
+                switch(evt.keyCode){
+	                case 80: //'p'
+	                    paused =!paused;
+	                    break;	                
+	                default:
+	                	break;    
+	            }    	
+		    });	  
+		</script>
+	</head>
+	<body onload="setupTexture()"></body>
+</html>

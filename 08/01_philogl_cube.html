@@ -1,0 +1,182 @@
+<!doctype html>
+<html>
+	<head>
+		<title>PhiloGL Cube Test</title>
+		<style>
+			body{ background-color: grey; }
+			canvas{ background-color: white; }
+		</style>
+		<script src="/beginningwebgl/code/lib/PhiloGL-1.5.1/build/PhiloGL.js"></script>
+		<script id="shader-vs" type="x-shader/x-vertex">
+		  attribute vec3 aVertexPosition;
+		  attribute vec4 aVertexColor;
+
+		  uniform mat4 uMVMatrix;
+		  uniform mat4 uPMatrix;
+
+		  varying vec4 vColor;
+
+		  void main(void) {
+		    gl_Position = uPMatrix * uMVMatrix * vec4(aVertexPosition, 1.0);
+		    vColor = aVertexColor;
+		  }
+		</script>
+		<script id="shader-fs" type="x-shader/x-fragment">
+		  varying highp vec4 vColor;
+
+		  void main(void) {
+		    gl_FragColor = vColor;
+		  }
+		</script>
+		<script>
+			//modified from https://github.com/senchalabs/philogl/blob/master/examples/lessons/4/index.html,
+			//https://github.com/senchalabs/philogl/blob/master/examples/lessons/4/index.js
+			function webGLStart() {
+			  //Load model		  
+			  var cube = new PhiloGL.O3D.Model({
+			    vertices: [-1, -1,  1,
+			                1, -1,  1,
+			                1,  1,  1,
+			               -1,  1,  1,
+
+			               -1, -1, -1,
+			               -1,  1, -1,
+			                1,  1, -1,
+			                1, -1, -1,
+
+			               -1,  1, -1,
+			               -1,  1,  1,
+			                1,  1,  1,
+			                1,  1, -1,
+
+			               -1, -1, -1,
+			                1, -1, -1,
+			                1, -1,  1,
+			               -1, -1,  1,
+
+			                1, -1, -1,
+			                1,  1, -1,
+			                1,  1,  1,
+			                1, -1,  1,
+
+			               -1, -1, -1,
+			               -1, -1,  1,
+			               -1,  1,  1,
+			               -1,  1, -1],
+
+			    colors: [1, 0, 0, 1, 
+			             1, 0, 0, 1,
+			             1, 0, 0, 1,
+			             1, 0, 0, 1,
+			             1, 1, 0, 1, 
+			             1, 1, 0, 1, 
+			             1, 1, 0, 1, 
+			             1, 1, 0, 1, 
+			             0, 1, 0, 1, 
+			             0, 1, 0, 1, 
+			             0, 1, 0, 1, 
+			             0, 1, 0, 1, 
+			             1, 0.5, 0.5, 1, 
+			             1, 0.5, 0.5, 1, 
+			             1, 0.5, 0.5, 1, 
+			             1, 0.5, 0.5, 1, 
+			             1, 0, 1, 1, 
+			             1, 0, 1, 1, 
+			             1, 0, 1, 1, 
+			             1, 0, 1, 1, 
+			             0, 0, 1, 1,
+			             0, 0, 1, 1,
+			             0, 0, 1, 1,
+			             0, 0, 1, 1],
+
+			    indices: [0, 1, 2, 0, 2, 3,
+			              4, 5, 6, 4, 6, 7,
+			              8, 9, 10, 8, 10, 11,
+			              12, 13, 14, 12, 14, 15,
+			              16, 17, 18, 16, 18, 19,
+			              20, 21, 22, 20, 22, 23]
+			  });
+
+			  PhiloGL('my-canvas', {
+			    program: {
+			      from: 'ids',
+			      vs: 'shader-vs',
+			      fs: 'shader-fs'
+			    },
+			    onError: function() {
+			      alert("An error ocurred while loading the application");
+			    },
+			    onLoad: function(app) {
+			      var gl = app.gl,
+			          canvas = app.canvas,
+			          program = app.program,
+			          camera = app.camera,
+			          view = new PhiloGL.Mat4,
+			          rCube = 0;
+
+			      gl.viewport(0, 0, canvas.width, canvas.height);
+			      gl.clearColor(0, 0, 0, 1);
+			      gl.clearDepth(1);
+			      gl.enable(gl.DEPTH_TEST);
+			      gl.depthFunc(gl.LEQUAL);
+			      
+			      camera.view.id();
+			  
+			      function setupElement(elem) {
+			        //update element matrix
+			        elem.update();
+			        //get new view matrix out of element and camera matrices
+			        view.mulMat42(camera.view, elem.matrix);
+			        //set buffers with element data
+			        program.setBuffers({
+			          'aVertexPosition': {
+			            value: elem.vertices,
+			            size: 3
+			          },
+			          'aVertexColor': {
+			            value: elem.colors,
+			            size: 4
+			          }
+			        });
+			        //set uniforms
+			        program.setUniform('uMVMatrix', view);
+			        program.setUniform('uPMatrix', camera.projection);
+			      }
+
+			      function animate() {
+			        rCube += 0.01;
+			      }
+
+			      function tick() {
+			        drawScene();
+			        animate();
+			        PhiloGL.Fx.requestAnimationFrame(tick);
+			      }
+
+			      function drawScene() {
+			        gl.clear(gl.COLOR_BUFFER_BIT | gl.DEPTH_BUFFER_BIT);
+			        
+			        //Draw Cube
+			        cube.position.set(1.5, 0, -8);
+			        cube.rotation.set(rCube, rCube, rCube);
+			        setupElement(cube);
+			        program.setBuffer('indices', {
+			          value: cube.indices,
+			          bufferType: gl.ELEMENT_ARRAY_BUFFER,
+			          size: 1
+			        });
+			        gl.drawElements(gl.TRIANGLES, cube.indices.length, gl.UNSIGNED_SHORT, 0);
+			      }
+			      
+			      tick();
+			    } 
+			  });			  
+			}
+		</script>
+	</head>
+	<body onload="webGLStart();">
+		<canvas id="my-canvas" width="400" height="300">
+		Your browser does not support the HTML5 canvas element.
+		</canvas>
+	</body>
+</html>

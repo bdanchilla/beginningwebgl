@@ -1,0 +1,521 @@
+<!doctype html>
+<html>
+	<head>
+		<title>06 - Ramp</title>
+		<style>
+			body{ background-color: grey; }
+			canvas{ background-color: white; }
+		</style>
+               <script src="//code.jquery.com/jquery.min.js"></script>
+   		<script src="/beginningwebgl/code/lib/raf_polyfill.js"></script>
+		<script src="/beginningwebgl/code/lib/gl-matrix-min.js"></script>
+		<script src="/beginningwebgl/code/lib/webgl-debug.js"></script>
+		<script src="/beginningwebgl/code/05/vector3.js"></script>		
+		<script src="/beginningwebgl/code/05/sphere_mesh.js"></script>
+		<script src="/beginningwebgl/code/05/plane_mesh.js"></script>	
+		<script src="/beginningwebgl/code/05/SphereObject.js"></script>
+		<script src="/beginningwebgl/code/05/WallObject.js"></script>
+		<script>
+			var gl = null,
+				canvas = null,
+				glProgram = null,
+				fragmentShader = null,
+				vertexShader = null;
+
+			var vertexPositionAttribute = null,
+				vertexNormalAttribute = null,
+				vertexColorAttribute = null,
+				trianglesVerticeBuffers = [],
+				trianglesNormalBuffers = [],
+				trianglesColorBuffers = [],
+				vertexIndexBuffers = [];
+
+			var sphere = null; 
+
+			var GROUND_Y = -1.0;
+				PLANE_SIZE = 100.0;
+				
+			//ramp dimensions
+			var	HEIGHT_1 = 65.0,
+				HEIGHT_2 = 15.0,
+				HEIGHT_3 = 20.0,
+				HEIGHT_4 = 15.0,
+				LENGTH = 60.0,
+				LENGTH_2 = 60.0 * 0.5,
+				LENGTH_3 = 60.0 * 0.75,
+				LANDING_RAMP_START = LENGTH * 2.0,
+				LANDING_RAMP_END = LENGTH * 3.0,
+			    DEPTH = 25.0;
+
+			var SCALE = 0.15;
+
+			var ramp_walls = [];	
+
+			//mouse events	
+			var capture = false;
+           	var start = 0;
+			
+			var angleX = 0.0,
+				angleY = 0.0;
+
+			var mvMatrix = mat4.create(),
+				pMatrix = mat4.create(),
+				normalMatrix = mat3.create();
+
+			var paused = false;
+
+			$(document).keyup(function(evt){
+                switch(evt.keyCode){
+	                case 80: //'p'
+	                    paused =!paused;
+	                    break;	                
+	                default:
+	                	break;    
+	            }    	
+		    });	  
+
+			function initWebGL()
+			{
+				canvas = document.getElementById("my-canvas");  
+				try{
+					gl =  canvas.getContext("webgl", {preserveDrawingBuffer: true}) || 
+						  canvas.getContext("experimental-webgl", {preserveDrawingBuffer: true});					
+				}catch(e){
+				}
+								
+				if(gl)
+				{
+					gl = WebGLDebugUtils.makeDebugContext(gl);
+					initShaders();
+					setupPlaneMesh(0, {	"translation": [0.0, GROUND_Y, 0.0], "size": PLANE_SIZE} );
+					addRamp(1);
+					setupRampWalls();
+
+					var radius = 2.0;
+					sphere = new SphereObject( {	"vbo_index": 2, 
+												"radius": radius,
+												"position": new Vector3(0.0, HEIGHT_1 * SCALE, 0.0), 
+												"velocity": new Vector3(0.0, 0.0, 0.0), 
+												"acceleration": new Vector3(0.0, -0.001, 0.0)
+												});
+					sphere.total_velocity = 0.0;
+					setupSphereMesh(2, {"color": [1.0, 0.0, 0.0, 1.0], "radius": radius  }	);
+
+					getMatrixUniforms();					
+
+					vertexPositionAttribute = gl.getAttribLocation(glProgram, "aVertexPosition");
+					vertexColorAttribute = gl.getAttribLocation(glProgram, "aVertexColor");
+					vertexNormalAttribute = gl.getAttribLocation(glProgram, "aVertexNormal");
+	                gl.enableVertexAttribArray(vertexPositionAttribute);
+	                gl.enableVertexAttribArray(vertexColorAttribute);
+	                gl.enableVertexAttribArray(vertexNormalAttribute);
+    			    
+    			    gl.viewport(0, 0, canvas.width, canvas.height);
+					mat4.perspective(45, canvas.width / canvas.height, 0.1, 100.0, pMatrix);
+					gl.uniformMatrix4fv(glProgram.pMatrixUniform, false, pMatrix);
+					
+					(function animLoop(){
+						if( !paused ){	
+							setupWebGL();
+							drawScene(); 
+							checkForCollisions();
+						}
+						//paused = true;
+						requestAnimationFrame(animLoop, canvas);
+					})();
+				}else{	
+					alert(  "Error: Your browser does not appear to support WebGL.");
+				}
+			}
+			
+			function setupWebGL()
+			{
+				//set the clear color to a shade of green
+			//	gl.clearColor(0.5, 0.5, 0.5, 1.0); 	
+			//	gl.clear(gl.COLOR_BUFFER_BIT | gl.DEPTH_BUFFER_BIT); 	
+				gl.enable(gl.DEPTH_TEST);
+			}
+			
+			function initShaders()
+			{
+				//get shader sources with jQuery Ajax
+				$.ajax({
+				    async: false,
+				    url: './01_gravity.vs',
+				    success: function (data) {
+				        vs_source = data.firstChild.textContent;
+				    },
+				    dataType: 'xml'
+				});
+
+				$.ajax({
+				    async: false,
+				    url: './01_gravity.fs',
+				    success: function (data) {
+				        fs_source = data.firstChild.textContent;
+				    },
+				    dataType: 'xml'
+				});
+
+				//compile shaders	
+                vertexShader = makeShader(vs_source, gl.VERTEX_SHADER);
+				fragmentShader = makeShader(fs_source, gl.FRAGMENT_SHADER);
+				
+				//create program
+				glProgram = gl.createProgram();
+				
+				//attach and link shaders to the program
+                gl.attachShader(glProgram, vertexShader);
+                gl.attachShader(glProgram, fragmentShader);
+                gl.linkProgram(glProgram);
+
+                if (!gl.getProgramParameter(glProgram, gl.LINK_STATUS)) {
+                    alert("Unable to initialize the shader program.");
+                }
+				
+				//use program
+				gl.useProgram(glProgram);
+			}
+			
+			function makeShader(src, type)
+			{
+				//compile the vertex shader
+				var shader = gl.createShader(type);
+                gl.shaderSource(shader, src);
+                gl.compileShader(shader);
+
+                if (!gl.getShaderParameter(shader, gl.COMPILE_STATUS)) {
+                    alert("Error compiling shader: " + gl.getShaderInfoLog(shader));
+                }
+				return shader;
+			}
+			
+			function drawScene()
+			{
+				var tX=-20;//angleX;
+				var tY=7;//angleY;
+		
+				for(var i=0; i < vertexIndexBuffers.length; ++i)
+				{
+					//reset modelview matrix
+					mat4.identity(mvMatrix);
+					
+					//scene wide translations
+					mat4.translate(mvMatrix, [0.0, -1.0, -35.0]);              		
+					mat4.rotate(mvMatrix, tX*2*Math.PI/180.0, [0.0, 1.0, 0.0]);              
+					mat4.rotate(mvMatrix, tY*2*Math.PI/180.0, [1.0, 0.0, 0.0]);              
+				
+					//coordinate space translations
+					if(i==1)	//ramp
+					{
+						mat4.translate(mvMatrix, [-LANDING_RAMP_END*0.5*SCALE, GROUND_Y, -DEPTH*0.5*SCALE]);     
+						mat4.scale(mvMatrix, [SCALE, SCALE, SCALE]);						
+					}else if(i==2)	//sphere
+					{
+						mat4.translate(mvMatrix, [	(sphere.radius - LANDING_RAMP_END*0.5) * SCALE + sphere.position.x, 
+													(GROUND_Y - sphere.radius) * SCALE + sphere.position.y, 
+													sphere.position.z
+												]);             
+						mat4.scale(mvMatrix, [SCALE, SCALE, SCALE]);
+					}	    			
+
+	    			mat4.toInverseMat3(mvMatrix, normalMatrix);
+		   			mat3.transpose(normalMatrix);
+					setMatrixUniforms();
+
+					gl.bindBuffer(gl.ARRAY_BUFFER, trianglesVerticeBuffers[i]);
+					gl.vertexAttribPointer(vertexPositionAttribute, 3, gl.FLOAT, false, 0, 0);
+
+					if( i==1 ){ //ramp
+						gl.disableVertexAttribArray(vertexColorAttribute);
+						gl.vertexAttrib4f(vertexColorAttribute, 1.0, 0.9, 0.7, 1.0);
+					}else{
+						gl.enableVertexAttribArray(vertexColorAttribute);
+						              
+						gl.bindBuffer(gl.ARRAY_BUFFER, trianglesColorBuffers[i]);
+						gl.vertexAttribPointer(vertexColorAttribute, 4, gl.FLOAT, false, 0, 0);
+					}
+
+					gl.bindBuffer(gl.ARRAY_BUFFER, trianglesNormalBuffers[i]);
+					gl.vertexAttribPointer(vertexNormalAttribute, 3, gl.FLOAT, false, 0, 0);
+					
+					gl.bindBuffer(gl.ELEMENT_ARRAY_BUFFER, vertexIndexBuffers[i]);
+					gl.drawElements(gl.TRIANGLES, vertexIndexBuffers[i].numItems, gl.UNSIGNED_SHORT, 0);
+				}
+			}
+
+			function checkForCollisions()
+			{		
+				var x = sphere.position.x/SCALE;
+				var y = sphere.position.y/SCALE;
+				if( sphere.position.y < 0.0){ return; }
+
+				var found = false;
+				for(var i in ramp_walls)
+				{
+					if( x >= ramp_walls[i].start_x && x <= ramp_walls[i].end_x ) 
+					{
+						found = true;
+
+						if(ramp_walls[i].slope < -0.001 || ramp_walls[i].slope > 0.001)
+						{
+							if(ramp_walls[i].slope > 0.001)
+							{
+								sphere.total_velocity -= sphere.acceleration.y;
+							}else if(ramp_walls[i].slope < -0.001){
+								sphere.total_velocity += sphere.acceleration.y;						
+							}
+							//console.log(sphere.total_velocity);
+							sphere.velocity.x = (sphere.total_velocity * Math.cos(ramp_walls[i].angle)); 
+							sphere.velocity.y = sphere.total_velocity * Math.sin(ramp_walls[i].angle); 
+					
+							sphere.position.y += sphere.velocity.y; 
+						}
+						sphere.position.x += sphere.velocity.x; 
+					}
+				}
+
+				if(!found){
+					sphere.velocity.y += sphere.acceleration.y;
+					sphere.position.x += sphere.velocity.x; 
+					sphere.position.y += sphere.velocity.y; 
+				}
+			}
+
+			function setupRampWalls()
+			{
+			   	var w = {	"start_x": 0.0,
+	           				"start_y": HEIGHT_1,
+	           				"end_x": LENGTH_2,
+	           				"end_y": HEIGHT_2
+	           			};
+	           	ramp_walls.push(new WallObject(w));
+	           	
+	           	p = {	    "start_x": LENGTH_2,
+	           				"start_y": HEIGHT_2,
+	           				"end_x": LENGTH_3,
+	           				"end_y": HEIGHT_2
+	           			};
+	           	ramp_walls.push(new WallObject(p));
+	           	
+	           	p = {	    "start_x": LENGTH_3,
+	           				"start_y": HEIGHT_2,
+	           				"end_x": LENGTH,
+	           				"end_y": HEIGHT_3
+	           			};
+	           	ramp_walls.push(new WallObject(p));
+
+	           	p = {		"start_x": LANDING_RAMP_START,
+	           				"start_y": HEIGHT_4,
+	           				"end_x": LANDING_RAMP_END,
+	           				"end_y": 0.0
+	           			};
+	           	ramp_walls.push(new WallObject(p));
+			}
+
+			function getMatrixUniforms(){
+                glProgram.pMatrixUniform = gl.getUniformLocation(glProgram, "uPMatrix");
+                glProgram.mvMatrixUniform = gl.getUniformLocation(glProgram, "uMVMatrix");          
+                glProgram.normalMatrixUniform = gl.getUniformLocation(glProgram, "uNormalMatrix");          
+            }
+			
+			function setMatrixUniforms() {       
+                gl.uniformMatrix4fv(glProgram.mvMatrixUniform, false, mvMatrix);
+                gl.uniformMatrix3fv(glProgram.normalMatrixUniform, false, normalMatrix);
+            }   
+
+            function addRamp(n)
+            {
+
+            	var colorData = [];
+            	//26 vertices
+	           	var vertexPositionData = [
+	           		//0-3
+	           		0,0,0,		
+	           		LENGTH_2,0,0,
+	           		LENGTH_3,0,0,
+	           		LENGTH,0,0,
+	           		
+	           		//4-7
+	           		0,HEIGHT_2,0,
+	           		LENGTH_2,HEIGHT_2,0,
+	           		LENGTH_3,HEIGHT_2,0,
+	           		LENGTH,HEIGHT_2,0,
+
+	           		//8-9
+	           		0,HEIGHT_1,0,
+	           		LENGTH, HEIGHT_3,0,
+
+	           		//just z-values change
+	           		//10-13
+	           		0,0,DEPTH,
+	           		LENGTH_2,0,DEPTH,
+	           		LENGTH_3,0,DEPTH,
+	           		LENGTH,0,DEPTH,
+	           		
+	           		//14-17
+	 	            0,HEIGHT_2,DEPTH,
+	           		LENGTH_2,HEIGHT_2,DEPTH,
+	           		LENGTH_3,HEIGHT_2,DEPTH,
+	           		LENGTH,HEIGHT_2,DEPTH,
+
+
+	           		//18-19
+	           		0,HEIGHT_1,DEPTH,
+	           		LENGTH, HEIGHT_3,DEPTH,
+
+	           		//down ramp
+	           		//20-22
+	           		LANDING_RAMP_START, 0, 0,
+	           		LANDING_RAMP_END, 0, 0,
+	           		LANDING_RAMP_START, HEIGHT_4, 0,
+
+	           		//23-25
+	           		LANDING_RAMP_START, 0, DEPTH,
+	           		LANDING_RAMP_END, 0, DEPTH,
+	           		LANDING_RAMP_START, HEIGHT_4, DEPTH
+	           	];
+
+	           	//28 faces = 84 indices
+	           	var indexData = [
+	           		0,1,5,
+	           		0,5,4,
+	           		1,6,5,
+	           		1,2,6,	//front side
+	           		2,3,7,
+	           		2,7,6,
+	           		6,7,9,
+	           		4,5,8,
+
+	           		10,15,11,
+	           		10,14,15,
+	           		11,15,16,
+	           		11,16,12,	//back side
+	           		12,17,13,
+	           		12,16,17,
+	           		16,19,17,
+	           		14,18,15,
+
+	           		0,13,3,		//bottom
+	           		0,10,13,
+
+	           		0,8,10,		//left
+	           		8,18,10,	
+
+	           		3,13,9,		//right
+	           		9,13,19,	
+
+	           		8,5,15,			//top
+	           		8,15,18,
+	           		5,6,16,
+	           		5,16,15,
+	           		6,9,19,
+	           		6,19,16,
+
+	           		//down ramp
+	           		20,21,22,
+	           		23,25,24,	//sides
+
+	           		20,22,23,
+	           		23,22,25,	//back
+
+	           		20,23,21,
+	           		21,23,24,	//bottom
+
+	           		21,24,22,	//top
+	           		22,24,25
+	           	];
+
+	          normalData = calculateNormals(vertexPositionData, indexData);
+
+			  trianglesNormalBuffers[n] = gl.createBuffer();
+			  gl.bindBuffer(gl.ARRAY_BUFFER, trianglesNormalBuffers[n]);
+			  gl.bufferData(gl.ARRAY_BUFFER, new Float32Array(normalData), gl.STATIC_DRAW);
+			  trianglesNormalBuffers[n].itemSize = 3;
+			  trianglesNormalBuffers[n].numItems = normalData.length / 3;
+		
+			  trianglesVerticeBuffers[n] = gl.createBuffer();
+			  gl.bindBuffer(gl.ARRAY_BUFFER, trianglesVerticeBuffers[n]);
+			  gl.bufferData(gl.ARRAY_BUFFER, new Float32Array(vertexPositionData), gl.STATIC_DRAW);
+			  trianglesVerticeBuffers[n].itemSize = 3;
+			  trianglesVerticeBuffers[n].numItems = vertexPositionData.length / 3;
+			 
+
+			  vertexIndexBuffers[n] = gl.createBuffer();
+			  gl.bindBuffer(gl.ELEMENT_ARRAY_BUFFER, vertexIndexBuffers[n]);
+			  gl.bufferData(gl.ELEMENT_ARRAY_BUFFER, new Uint16Array(indexData), gl.STREAM_DRAW);
+			  vertexIndexBuffers[n].itemSize = 3;
+			  vertexIndexBuffers[n].numItems = indexData.length;
+
+		}
+
+		function calculateNormals(vertices, indices)
+		{
+			var normals = [];
+			for(var i=0; i<indices.length; i+=3)
+			{
+				var a = indices[i];
+				var b = indices[i + 1];
+				var c = indices[i + 2];
+
+				//normal is the cross product
+				var v1 = [
+							vertices[a*3] - vertices[b*3],
+							vertices[a*3 + 1] - vertices[b*3 + 1],
+							vertices[a*3 + 2] - vertices[b*3 + 2]
+						];
+				var v2 = [
+							vertices[a*3] - vertices[c*3],
+							vertices[a*3 + 1] - vertices[c*3 + 1],
+							vertices[a*3 + 2] - vertices[c*3 + 2]
+					];
+
+				var cross = [
+						v1[1]*v2[2] - v1[2]*v2[1],
+						v1[2]*v2[0] - v1[0]*v2[2],
+						v1[0]*v2[1] - v1[1]*v2[0]
+				];	
+				console.log(cross);
+				//same value for each of the three vertices
+				normals.push.apply(normals, cross);
+				normals.push.apply(normals, cross);
+				normals.push.apply(normals, cross);
+			}	
+			console.log(normals);
+			return normals;
+		}
+
+		 $(document).ready(function(){
+            	$("#my-canvas").on("mousedown", function (e){
+   					 capture = true;
+			    	 start = [e.pageX, e.pageY]; //0 to 500
+			    	 console.log("start:" + start);
+				});
+
+   				$("#my-canvas").on("mouseup", function (e){
+   					 capture = false;
+   					 console.log("end capture");
+				});
+			
+				 $("#my-canvas").mousemove(function(e) {
+				 	if(capture)
+				 	{
+	   				 	var x = (e.pageX - start[0]);
+	   				 	var y = (e.pageY - start[1]);
+						start[0] = e.pageX;
+						start[1] = e.pageY;
+
+	   				 	angleX += x;
+						angleY += y;
+					}
+   				 });
+
+            });
+		</script>
+	</head>
+	<body onload="initWebGL()">
+		<canvas id="my-canvas" width="500" height="500">
+		Your browser does not support the HTML5 canvas element.
+		</canvas>
+	</body>
+</html>

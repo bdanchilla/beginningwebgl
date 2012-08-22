@@ -1,0 +1,75 @@
+<!doctype html>
+<html>
+	<head>
+		<title>three.js Cube Test</title>
+		<style>
+			body{ background-color: grey; }
+			canvas{ background-color: white; }
+		</style>
+        <script src="/beginningwebgl/code/lib/three.js/build/Three.js"></script>
+		<script>
+			var CANVAS_WIDTH = 400,
+				CANVAS_HEIGHT= 300;
+
+			var renderer = null,	//WebGL or 2D
+				scene = null,		//scene object
+				camera = null;		//camera object
+			
+			function initWebGL()
+			{
+				setupRenderer();
+				setupScene();
+				setupCamera();
+
+				renderer.render(scene, camera);
+			}
+
+			function setupRenderer()
+			{
+				renderer = new THREE.WebGLRenderer();
+				renderer.setSize( CANVAS_WIDTH, CANVAS_HEIGHT );
+				renderer.setClearColorHex(0x777777, 1.0);
+			
+				//where to add the canvas element
+				document.body.appendChild(  renderer.domElement );
+			}
+
+			function setupScene()
+			{
+				scene = new THREE.Scene();				
+				addMesh();
+				addLight();
+			}
+
+			function setupCamera()
+			{
+				camera = new THREE.PerspectiveCamera(
+				    35,         					// Field of view
+				    CANVAS_WIDTH / CANVAS_HEIGHT,  	// Aspect ratio
+				    .1,    						    // Near clip plane
+				    10000  					        // Far clip plane
+				);
+				camera.position.set( -15, 10, 10 );
+				camera.lookAt( scene.position );
+				scene.add( camera );
+			}
+
+			function addMesh()
+			{
+				var cube = new THREE.Mesh( 
+							new THREE.CubeGeometry( 5, 7, 5 ), 
+							new THREE.MeshLambertMaterial( { color: 0x0000FF } )
+					);
+				scene.add(cube);
+			}
+
+			function addLight()
+			{
+				var light = new THREE.PointLight( 0xFFFFFF );
+				light.position.set( 10, 10, 10 );
+				scene.add(light);
+			}
+		</script>
+	</head>
+	<body onload="initWebGL()"></body>
+</html>

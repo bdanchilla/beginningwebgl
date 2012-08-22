@@ -1,0 +1,179 @@
+<!doctype html>
+<html>
+	<head>
+		<title>Three.js and Physi.js Test</title>
+		<style>
+			body{ background-color: grey; }
+			canvas{ background-color: white; }
+		</style>
+		<script src="//code.jquery.com/jquery.min.js"></script>
+		<script src="/beginningwebgl/code/lib/three.js/build/Three.js"></></script>
+		<script src="/beginningwebgl/code/lib/physi.js/physi.js"></script>
+		<script>
+			Physijs.scripts.worker = '/beginningwebgl/code/lib/physi.js/physijs_worker.js';
+			Physijs.scripts.ammo = '/beginningwebgl/code/lib/ammo.js/builds/ammo.js';
+			
+			var CANVAS_WIDTH = 500,
+				CANVAS_HEIGHT= 500,
+				ROOM_SIZE = 20.0,
+				HALF_ROOM_SIZE = ROOM_SIZE * 0.5,
+				NUM_SPHERES = 50,
+				paused = false;
+
+			var renderer = null,	//WebGL or 2D
+				scene = null,		//scene object
+				camera = null;		//camera object
+				
+			$(document).keyup(function(evt){
+		        switch(evt.keyCode){
+		            case 80: //'p'
+		                paused =!paused;
+		                break;	                
+		            default:
+		            	break;    
+		        }    	
+		    });	  
+
+			function initWebGL()
+			{
+				setupRenderer();
+				setupScene();
+				setupCamera();
+					
+				(function animLoop(){
+					if(!paused)
+					{
+						scene.simulate();	//run the physics
+						renderer.render(scene, camera);	
+						requestAnimationFrame( animLoop );
+					}
+				})();
+			}
+
+			function setupRenderer()
+			{
+				renderer = new THREE.WebGLRenderer( { clearColor: 0x007700, clearAlpha: 1 } );
+				renderer.setSize( CANVAS_WIDTH, CANVAS_HEIGHT );			
+				document.body.appendChild(  renderer.domElement );
+			}
+
+			function setupScene()
+			{
+				scene = new Physijs.Scene();		
+				addMeshes();
+				addLight();
+			}
+
+			function setupCamera()
+			{
+				camera = new THREE.PerspectiveCamera(
+				    45,         					// Field of view
+				    CANVAS_WIDTH / CANVAS_HEIGHT,  	// Aspect ratio
+				    .1,    						    // Near clip plane
+				    10000  					        // Far clip plane
+				);
+
+				camera.position.set( ROOM_SIZE, ROOM_SIZE*1.5, ROOM_SIZE );
+				camera.lookAt( scene.position );
+				scene.add( camera );
+			}
+
+			function addMeshes()
+			{
+				addGround();						  
+				addWalls();						  
+
+				for(var i=1; i<=NUM_SPHERES;++i)
+				{
+					var geometry = new THREE.SphereGeometry(Math.random() + .25);
+					var material = Physijs.createMaterial(new THREE.MeshLambertMaterial( 
+									{ 
+									  color:  new THREE.Color().setRGB(Math.random(), Math.random(), 
+									  				Math.random()).getHex(),
+									}),
+									0.1,	//friction
+									0.9		//bounce							  
+								);
+					var mesh = new Physijs.SphereMesh( 
+						geometry, 
+						material
+					);
+					mesh.position.x = HALF_ROOM_SIZE*Math.random()-HALF_ROOM_SIZE*.5;
+					mesh.position.y = HALF_ROOM_SIZE*Math.random()-HALF_ROOM_SIZE*.5;
+					mesh.position.z = HALF_ROOM_SIZE*Math.random()-HALF_ROOM_SIZE*.5;
+					mesh.castShadow = true;
+					scene.add(mesh);
+				}
+			}
+
+			function addGround()
+			{
+				var material = Physijs.createMaterial(
+					new THREE.MeshLambertMaterial({ "color": "0xffdddd" }),
+					.1, // low friction
+					.9  // high restitution
+				);
+
+				var ground = new Physijs.BoxMesh(
+					new THREE.CubeGeometry(ROOM_SIZE, 1, ROOM_SIZE),
+					material,
+					0 // mass
+				);
+				ground.position.y = -HALF_ROOM_SIZE/2.0;
+				ground.receiveShadow = true;
+				scene.add( ground );
+			}
+
+			function addWalls()
+			{
+				var material = Physijs.createMaterial(
+					new THREE.MeshLambertMaterial({ "color": "0xaaaaff" }),
+					.1, // low friction
+					.9  // high restitution
+				);
+
+				var ground = new Physijs.BoxMesh(
+					new THREE.CubeGeometry(ROOM_SIZE, HALF_ROOM_SIZE, 1),
+					material,
+					0 // mass
+				);
+				ground.position.z = -HALF_ROOM_SIZE;
+				scene.add( ground );
+
+				var ground = new Physijs.BoxMesh(
+					new THREE.CubeGeometry(ROOM_SIZE, HALF_ROOM_SIZE, 1),
+					material,
+					0 // mass
+				);
+				ground.position.z = HALF_ROOM_SIZE;
+				ground.receiveShadow = true;
+				scene.add( ground );
+
+				var ground = new Physijs.BoxMesh(
+					new THREE.CubeGeometry(1, HALF_ROOM_SIZE, ROOM_SIZE),
+					material,
+					0 // mass
+				);
+				ground.position.x = -HALF_ROOM_SIZE;
+				scene.add( ground );
+
+				var ground = new Physijs.BoxMesh(
+					new THREE.CubeGeometry(1, HALF_ROOM_SIZE, ROOM_SIZE),
+					material,
+					0 // mass
+				);
+				ground.position.x = HALF_ROOM_SIZE;
+				ground.receiveShadow = true;
+				scene.add( ground );
+			}
+
+			function addLight()
+			{
+				var light = new THREE.PointLight( 0xFFFFFF );
+				light.position.set( 10, 10, 10 );
+				scene.add(light);
+			}
+		</script>
+	</head>
+	<body onload="initWebGL()"></body>
+</html>

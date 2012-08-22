@@ -1,0 +1,356 @@
+<!doctype html>
+<html>
+	<head>
+		<title>12 - Shadow</title>
+		<style>
+			body{ background-color: grey; }
+			canvas{ background-color: white; }
+		</style>
+        <script src="//code.jquery.com/jquery.min.js"></script>
+		<script src="/beginningwebgl/code/lib/webgl-debug.js"></script>
+		<script src="/beginningwebgl/code/lib/gl-matrix-min.js"></script>
+		<script src="/beginningwebgl/code/lib/raf_polyfill.js"></script>
+		<script src="/beginningwebgl/code/10/vector3.js"></script>		
+		<script src="/beginningwebgl/code/10/sphere_mesh.js"></script>
+		<script src="/beginningwebgl/code/10/plane_mesh.js"></script>	
+		<script>
+			var gl = null,
+				canvas = null,
+				glProgram = [],
+				fragmentShader = [],
+				vertexShader = [],
+				vs_source = [],
+				fs_source = [],
+				DEPTH_MAP_GENERATION_PROGRAM = 0,
+				RENDER_PROGRAM = 1,
+				NUMBER_PROGRAMS = 2;
+				
+			var vertexPositionAttribute = [],
+				vertexNormalAttribute = null,
+				vertexColorAttribute = null,
+				trianglesVerticeBuffers = [],
+				trianglesNormalBuffers = [],
+				trianglesColorBuffers = [],
+				vertexIndexBuffers = [];
+
+			var mvMatrix = mat4.create(),
+				lightMVMatrix = mat4.create(),
+				pMatrix = mat4.create(),
+				normalMatrix = mat3.create(),
+                shadowBiasMatrix = mat4.create();
+
+                mat4.identity(shadowBiasMatrix);
+                mat4.scale(shadowBiasMatrix, [0.5, 0.5, 0.5], shadowBiasMatrix);
+                mat4.translate(shadowBiasMatrix, [1.0, 1.0, 1.0, 1.0], shadowBiasMatrix);
+
+            //modelview matrix location is stationary for this demo. you can modify to make both the
+            //modelview moveable in addition to the light
+				mat4.identity(mvMatrix);
+				mat4.translate(mvMatrix, [0.0, 0.4, -6.5]);              
+				mat4.rotate(mvMatrix, -0.3, [-0.3, 0.0, 0.2]);              
+				mat4.rotate(mvMatrix, 90, [0.0, 1.0, 0.0]);              				  
+    			mat4.toInverseMat3(mvMatrix, normalMatrix);
+	   			mat3.transpose(normalMatrix);
+
+			var lightPosition = [0.0, 5.0, 0.0];	
+
+			var fbo = null,
+				fboTexture = null,
+				rbo = null;
+
+			var angle = 0.01,
+			    paused = false;
+
+			$(document).keyup(function(evt){
+                switch(evt.keyCode){
+	                case 80: //'p'
+	                    paused =!paused;
+	                    break;	                
+	                default:
+	                	break;    
+	            }    	
+		    });	  
+
+			function initWebGL()
+			{
+				canvas = document.getElementById("my-canvas");  
+				try{
+					gl = canvas.getContext("webgl") || canvas.getContext("experimental-webgl");							
+				}catch(e){
+				}
+								
+				if(gl)
+				{
+					gl = WebGLDebugUtils.makeDebugContext(gl);
+
+					initShaders();
+					setupSphereMesh(0, {
+											"translation": [-1.0, 2.2, 0.0], 
+											"color": [1.0, 0.0, 0.0, 1.0]
+										}
+									);
+					setupSphereMesh(1, {
+											"translation": [0.0, -0.4, 1.0], 
+											"color": [0.0, 1.0, 0.0, 1.0]
+										}
+					);
+					setupSphereMesh(2, {
+											"translation": [1.0, 0.25, -1.0], 
+											"color": [1.0, 1.0, 0.0, 1.0]
+										}
+					);
+					setupPlaneMesh(3, {	"translation": [0.0, -1.0, 0.0]} );
+					setupPlaneMesh(4, {	"size": 1.0, "translation": [0.0, -1.0, 0.0]} );
+
+	                
+					mat4.perspective(45, (canvas.width/2.0) / canvas.height, 0.1, 100.0, pMatrix);
+
+					///////// depth map shader program setup ///////
+					//render to the framebuffer
+   		        	//lights perspective
+				    //light position, look where, UP vector
+				    gl.useProgram(glProgram[DEPTH_MAP_GENERATION_PROGRAM]);
+					glProgram[DEPTH_MAP_GENERATION_PROGRAM].pMatrixUniform = gl.getUniformLocation(glProgram[DEPTH_MAP_GENERATION_PROGRAM], "uPMatrix");
+                	glProgram[DEPTH_MAP_GENERATION_PROGRAM].uLightMVMatrix = gl.getUniformLocation(glProgram[DEPTH_MAP_GENERATION_PROGRAM], "uLightMVMatrix");
+					gl.uniformMatrix4fv(glProgram[DEPTH_MAP_GENERATION_PROGRAM].pMatrixUniform, false, pMatrix);
+					vertexPositionAttribute[DEPTH_MAP_GENERATION_PROGRAM] = gl.getAttribLocation(glProgram[DEPTH_MAP_GENERATION_PROGRAM], "aVertexPosition");
+	                gl.enableVertexAttribArray(vertexPositionAttribute[DEPTH_MAP_GENERATION_PROGRAM]);
+					////////////////
+					
+					///////// second render pass shader program setup ///////
+					gl.useProgram(glProgram[RENDER_PROGRAM]);	
+					getMatrixUniforms();					
+					glProgram[RENDER_PROGRAM].uLightMVMatrix = gl.getUniformLocation(glProgram[RENDER_PROGRAM], "uLightMVMatrix");
+			        gl.uniformMatrix4fv(glProgram[RENDER_PROGRAM].uLightMVMatrix, false, lightMVMatrix);
+					vertexPositionAttribute[RENDER_PROGRAM] = gl.getAttribLocation(glProgram[RENDER_PROGRAM], "aVertexPosition");
+					vertexColorAttribute = gl.getAttribLocation(glProgram[RENDER_PROGRAM], "aVertexColor");
+					vertexNormalAttribute = gl.getAttribLocation(glProgram[RENDER_PROGRAM], "aVertexNormal");
+					gl.enableVertexAttribArray(vertexPositionAttribute[RENDER_PROGRAM]);
+	                gl.enableVertexAttribArray(vertexColorAttribute);
+	                gl.enableVertexAttribArray(vertexNormalAttribute);
+					glProgram[RENDER_PROGRAM].fboTextureUniform = gl.getUniformLocation(glProgram[RENDER_PROGRAM], "uFBOTexture");
+					gl.uniform1i(glProgram[RENDER_PROGRAM].fboTextureUniform, 0); 
+
+					glProgram[RENDER_PROGRAM].pMatrixUniform = gl.getUniformLocation(glProgram[RENDER_PROGRAM], "uPMatrix");
+		       		gl.uniformMatrix4fv(glProgram[RENDER_PROGRAM].pMatrixUniform, false, pMatrix);
+    				////////////////
+
+					gl.useProgram(glProgram[DEPTH_MAP_GENERATION_PROGRAM]);	
+		    		fbo = gl.createFramebuffer();
+					fboTexture = gl.createTexture();
+					rbo = gl.createRenderbuffer();
+				
+
+					(function animLoop(){
+						if( !paused ){	
+							var sine = Math.sin(angle);
+							lightPosition = [5.0*Math.cos(angle), 5.0+Math.sin(angle), 5.0*sine];
+				  
+							createFBO();
+						
+							//draw to left part of canvas the rendered scene.
+							gl.useProgram(glProgram[RENDER_PROGRAM]);
+		    			    gl.viewport(0, 0, canvas.width/2.0, canvas.height);
+							drawScene(RENDER_PROGRAM); 
+							angle += 0.005;
+	   	    			}
+						requestAnimationFrame(animLoop, canvas);
+					})();
+		
+				}else{	
+					alert(  "Error: Your browser does not appear to support WebGL.");
+				}
+			}
+
+			function createFBO()
+			{
+				gl.useProgram(glProgram[DEPTH_MAP_GENERATION_PROGRAM]);
+
+				//create frambuffer object
+				fbo.width = canvas.height;
+				fbo.height = canvas.height;
+				gl.bindFramebuffer(gl.FRAMEBUFFER, fbo);
+
+				//create the texture				
+				gl.bindTexture(gl.TEXTURE_2D, fboTexture);
+		      	gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_S, gl.CLAMP_TO_EDGE);
+				gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_T, gl.CLAMP_TO_EDGE);
+				gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MAG_FILTER, gl.LINEAR);
+				gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MIN_FILTER, gl.NEAREST);
+
+				gl.texImage2D(
+			      	gl.TEXTURE_2D, 0, gl.RGBA, fbo.width, fbo.height, 0,
+      				gl.RGBA, gl.UNSIGNED_BYTE, null);
+				
+				//setup the renderbuffer object
+				gl.bindRenderbuffer(gl.RENDERBUFFER, rbo);
+				gl.renderbufferStorage(gl.RENDERBUFFER, gl.DEPTH_COMPONENT16, fbo.width, fbo.height);
+				            
+				//setup attachments
+			 	 gl.framebufferTexture2D(gl.FRAMEBUFFER, gl.COLOR_ATTACHMENT0,  gl.TEXTURE_2D, fboTexture, 0);
+				 gl.framebufferRenderbuffer(gl.FRAMEBUFFER, gl.DEPTH_ATTACHMENT, gl.RENDERBUFFER, rbo)
+
+				//render the scene
+				setupWebGL();
+
+				//render to the framebuffer
+				gl.viewport(0, 0, fbo.width, fbo.height);
+				drawScene(DEPTH_MAP_GENERATION_PROGRAM); 
+
+				gl.activeTexture(gl.TEXTURE0);
+			    gl.bindTexture(gl.TEXTURE_2D, fboTexture);
+				gl.bindFramebuffer(gl.FRAMEBUFFER, null);
+
+				//render to the canvas on the right of the viewport - this is just for our curiosity and optional
+				gl.viewport(fbo.width, 0, fbo.width, fbo.height);
+				drawScene(DEPTH_MAP_GENERATION_PROGRAM); 
+			}
+			
+			function setupWebGL()
+			{
+				//set the clear color to a shade of green
+				gl.clearColor(0.5, 0.5, 0.5, 1.0); 	
+				gl.clear(gl.COLOR_BUFFER_BIT | gl.DEPTH_BUFFER_BIT); 	
+				gl.enable(gl.DEPTH_TEST);			
+			}
+			
+			function initShaders()
+			{
+
+				//get shader sources with jQuery Ajax
+				$.ajax({
+				    async: false,
+				    url: './scene_from_light.vs',
+				    success: function (data) {
+				        vs_source[DEPTH_MAP_GENERATION_PROGRAM] = data.firstChild.textContent;
+				    },
+				    dataType: 'xml'
+				});
+
+				$.ajax({
+				    async: false,
+				    url: './scene_from_light.fs',
+				    success: function (data) {
+				        fs_source[DEPTH_MAP_GENERATION_PROGRAM] = data.firstChild.textContent;
+				    },
+				    dataType: 'xml'
+				});
+
+				$.ajax({
+				    async: false,
+				    url: './shadow_lookup.vs',
+				    success: function (data) {
+				        vs_source[RENDER_PROGRAM] = data.firstChild.textContent;
+				    },
+				    dataType: 'xml'
+				});
+
+				$.ajax({
+				    async: false,
+				    url: './shadow_lookup.fs',
+				    success: function (data) {
+				        fs_source[RENDER_PROGRAM] = data.firstChild.textContent;
+				    },
+				    dataType: 'xml'
+				});
+
+				for(var i=0;i<NUMBER_PROGRAMS;++i)
+				{
+					//compile shaders	
+	                vertexShader[i] = makeShader(vs_source[i], gl.VERTEX_SHADER);
+					fragmentShader[i] = makeShader(fs_source[i], gl.FRAGMENT_SHADER);
+					
+					//create program
+					glProgram[i] = gl.createProgram();
+					
+					//attach and link shaders to the program
+	                gl.attachShader(glProgram[i], vertexShader[i]);
+	                gl.attachShader(glProgram[i], fragmentShader[i]);
+	                gl.linkProgram(glProgram[i]);
+
+	                if (!gl.getProgramParameter(glProgram[i], gl.LINK_STATUS)) {
+	                    alert("Unable to initialize the shader program.");
+	                }
+				}
+				//use program
+				gl.useProgram(glProgram[DEPTH_MAP_GENERATION_PROGRAM]);
+			}
+			
+			function makeShader(src, type)
+			{
+				//compile the vertex shader
+				var shader = gl.createShader(type);
+                gl.shaderSource(shader, src);
+                gl.compileShader(shader);
+
+                if (!gl.getShaderParameter(shader, gl.COMPILE_STATUS)) {
+                    alert("Error compiling shader: " + gl.getShaderInfoLog(shader));
+                }
+				return shader;
+			}
+			
+			function drawScene(p)
+			{
+				if(p === RENDER_PROGRAM)
+				{
+					gl.enableVertexAttribArray(vertexColorAttribute);
+                	gl.enableVertexAttribArray(vertexNormalAttribute);
+	                gl.enableVertexAttribArray(vertexPositionAttribute[RENDER_PROGRAM]);
+
+					setMatrixUniforms();
+					gl.activeTexture(gl.TEXTURE0);
+				    gl.bindTexture(gl.TEXTURE_2D, fboTexture);
+  					gl.uniform1i(glProgram[RENDER_PROGRAM].fboTextureUniform, 0); 
+				}else{
+ 				    lightMVMatrix = mat4.lookAt(lightPosition, [0,1,0], [0,1,0]);
+			        gl.uniformMatrix4fv(glProgram[DEPTH_MAP_GENERATION_PROGRAM].uLightMVMatrix, false, lightMVMatrix);
+
+					gl.disableVertexAttribArray(vertexColorAttribute);
+                	gl.disableVertexAttribArray(vertexNormalAttribute);
+	                gl.disableVertexAttribArray(vertexPositionAttribute[RENDER_PROGRAM]);
+	
+	                gl.enableVertexAttribArray(vertexPositionAttribute[DEPTH_MAP_GENERATION_PROGRAM]);
+				}
+
+				for(var i=0; i < (vertexIndexBuffers.length - 1); ++i)
+				{
+					gl.bindBuffer(gl.ARRAY_BUFFER, trianglesVerticeBuffers[i]);
+					gl.vertexAttribPointer(vertexPositionAttribute[p], 3, gl.FLOAT, false, 0, 0);
+
+					if(p === RENDER_PROGRAM)
+					{
+	                	gl.bindBuffer(gl.ARRAY_BUFFER, trianglesColorBuffers[i]);
+						gl.vertexAttribPointer(vertexColorAttribute, 4, gl.FLOAT, false, 0, 0);
+
+						gl.bindBuffer(gl.ARRAY_BUFFER, trianglesNormalBuffers[i]);
+						gl.vertexAttribPointer(vertexNormalAttribute, 3, gl.FLOAT, false, 0, 0);						
+					}
+					
+					gl.bindBuffer(gl.ELEMENT_ARRAY_BUFFER, vertexIndexBuffers[i]);
+					gl.drawElements(gl.TRIANGLES, vertexIndexBuffers[i].numItems, gl.UNSIGNED_SHORT, 0);
+				}
+			}
+			
+			function getMatrixUniforms(){
+				glProgram[RENDER_PROGRAM].uLightPosition = gl.getUniformLocation(glProgram[RENDER_PROGRAM], "uLightPosition");				
+                glProgram[RENDER_PROGRAM].mvMatrixUniform = gl.getUniformLocation(glProgram[RENDER_PROGRAM], "uMVMatrix");   
+                glProgram[RENDER_PROGRAM].normalMatrixUniform = gl.getUniformLocation(glProgram[RENDER_PROGRAM], "uNormalMatrix");   
+                glProgram[RENDER_PROGRAM].shadowBiasMatrixUniform = gl.getUniformLocation(glProgram[RENDER_PROGRAM], "uShadowBiasMatrix");   
+             }
+			
+			function setMatrixUniforms() {       
+                gl.uniformMatrix4fv(glProgram[RENDER_PROGRAM].mvMatrixUniform, false, mvMatrix);
+                gl.uniformMatrix3fv(glProgram[RENDER_PROGRAM].normalMatrixUniform, false, normalMatrix);
+		        gl.uniform3f(glProgram[RENDER_PROGRAM].uLightPosition, lightPosition[0], lightPosition[1], lightPosition[2]);
+ 				gl.uniformMatrix4fv(glProgram[RENDER_PROGRAM].uLightMVMatrix, false, lightMVMatrix);
+				gl.uniformMatrix4fv(glProgram[RENDER_PROGRAM].shadowBiasMatrixUniform, false, shadowBiasMatrix);
+		    }   
+
+		</script>
+	</head>
+	<body onload="initWebGL()">
+		<canvas id="my-canvas" width="1024" height="512">
+		Your browser does not support the HTML5 canvas element.
+		</canvas>
+	</body>
+</html>

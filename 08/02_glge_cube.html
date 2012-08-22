@@ -1,0 +1,52 @@
+<!doctype html>
+<html>
+	<head>
+		<title>GLGE Cube Test</title>
+		<style>
+			body{ background-color: grey; }
+			canvas{ background-color: white; }
+		</style>
+		<script src="/beginningwebgl/code/lib/GLGEv0.9/glge-compiled-min.js"></script>
+		<script src="/beginningwebgl/code/lib/raf_polyfill.js"></script>
+		<script>
+			//create a GLGE document
+			var doc = new GLGE.Document();
+			var angle = 0.0;
+			//load scene data from XML file. This scene file is from the demo at
+			//http://www.rozengain.com/blog/2010/06/23/hands-on-webgl-basic-glge-tutorial/
+			doc.load("./02_glge_scene.xml");
+			//doc.load("./02_glge_scene_collada.xml");
+
+			//callback when the scene is finished loading
+			doc.onLoad = function() {
+				//get a reference to the canvas element
+				var canvas = document.getElementById("my-canvas");
+				
+				//create a GLGE renderer
+				var renderer = new GLGE.Renderer(canvas);
+				
+				//set the scene for the renderer from the <scene> element of the XML file
+				renderer.setScene( doc.getElement("mainscene") );
+				
+				//get the box object, not the box mesh
+				var box = doc.getElement("box");
+			
+				//the rendering loop
+				(function animLoop(){
+					box.setRotX(angle);
+					box.setRotY(angle);
+					box.setRotZ(angle);
+					angle += 0.005;
+					
+					renderer.render();
+					requestAnimationFrame(animLoop, canvas);
+				})();
+			}
+		</script>
+	</head>
+	<body>
+		<canvas id="my-canvas" width="400" height="300">
+		Your browser does not support the HTML5 canvas element.
+		</canvas>
+	</body>
+</html>

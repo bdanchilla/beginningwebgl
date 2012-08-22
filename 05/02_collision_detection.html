@@ -1,0 +1,267 @@
+<!doctype html>
+<html>
+	<head>
+		<title>02 - Collision Detection with Walls</title>
+		<style>
+			body{ background-color: grey; }
+			canvas{ background-color: white; }
+		</style>
+        <script src="//code.jquery.com/jquery.min.js"></script>
+   		<script src="/beginningwebgl/code/lib/raf_polyfill.js"></script>
+		<script src="/beginningwebgl/code/lib/gl-matrix-min.js"></script>
+		<script src="/beginningwebgl/code/lib/webgl-debug.js"></script>
+		<script src="/beginningwebgl/code/05/vector3.js"></script>		
+		<script src="/beginningwebgl/code/05/sphere_mesh.js"></script>
+		<script src="/beginningwebgl/code/05/plane_mesh.js"></script>	
+		<script src="/beginningwebgl/code/05/SphereObject.js"></script>
+		<script>
+			var gl = null,
+				canvas = null,
+				glProgram = null,
+				fragmentShader = null,
+				vertexShader = null;
+				
+			var vertexPositionAttribute = null,
+				vertexNormalAttribute = null,
+				vertexColorAttribute = null,
+				trianglesVerticeBuffers = [],
+				trianglesNormalBuffers = [],
+				trianglesColorBuffers = [],
+				vertexIndexBuffers = [];
+
+			var sceneElements = []; 
+			var INITIAL_HEIGHT_TRANSLATION_OF_SPHERES  = 5.0;
+			var GROUND_Y = -1.0;
+			var PLANE_SIZE = 10.0;
+			var NUM_SPHERES = 50;
+
+			var mvMatrix = mat4.create(),
+				pMatrix = mat4.create(),
+				normalMatrix = mat3.create();
+
+			var ELASTICITY =  -0.8;	
+
+			var paused = false;
+
+			$(document).keyup(function(evt){
+                switch(evt.keyCode){
+	                case 80: //'p'
+	                    paused =!paused;
+	                    break;	                
+	                default:
+	                	break;    
+	            }    	
+		    });	  
+
+			function initWebGL()
+			{
+				canvas = document.getElementById("my-canvas");  
+				try{
+					gl = canvas.getContext("webgl") || canvas.getContext("experimental-webgl");					
+				}catch(e){
+				}
+								
+				if(gl)
+				{
+					gl = WebGLDebugUtils.makeDebugContext(gl);
+
+					initShaders();
+					setupPlaneMesh(0, {	"translation": [0.0, GROUND_Y, 0.0]} );
+					for(var i=1; i<=NUM_SPHERES;++i)
+					{
+						var radius = 0.5*Math.random() + .25;
+						var s = new SphereObject( {	"vbo_index": i, 
+																"radius": radius,
+																"position": new Vector3(10.0*Math.random()-5.0, -5.0*Math.random(), 10.0*Math.random()-5.0), 
+																"velocity": new Vector3(.1*(Math.random()-0.5), 0.0, .1*(Math.random()-0.5)), 
+																"acceleration": new Vector3(0.0, 0.01, 0.0)
+															
+												});
+						sceneElements.push(s);
+						setupSphereMesh(i, {"color": [Math.random(), Math.random(), Math.random(), 1.0], "radius":radius }	);
+					}
+					setupPlaneMesh(0, {	"translation": [0.0, GROUND_Y, 0.0]} );
+					getMatrixUniforms();					
+
+					vertexPositionAttribute = gl.getAttribLocation(glProgram, "aVertexPosition");
+					vertexColorAttribute = gl.getAttribLocation(glProgram, "aVertexColor");
+					vertexNormalAttribute = gl.getAttribLocation(glProgram, "aVertexNormal");
+	                gl.enableVertexAttribArray(vertexPositionAttribute);
+	                gl.enableVertexAttribArray(vertexColorAttribute);
+	                gl.enableVertexAttribArray(vertexNormalAttribute);
+    			    
+    			    gl.viewport(0, 0, canvas.width, canvas.height);
+					mat4.perspective(45, canvas.width / canvas.height, 0.1, 100.0, pMatrix);
+					gl.uniformMatrix4fv(glProgram.pMatrixUniform, false, pMatrix);
+					
+					(function animLoop(){
+						if( !paused ){	
+							setupWebGL();
+							drawScene(); 
+						}
+						requestAnimationFrame(animLoop, canvas);
+					})();
+				}else{	
+					alert(  "Error: Your browser does not appear to support WebGL.");
+				}
+			}
+			
+			function setupWebGL()
+			{
+				//set the clear color to a shade of green
+				gl.clearColor(0.5, 0.5, 0.5, 1.0); 	
+				gl.clear(gl.COLOR_BUFFER_BIT | gl.DEPTH_BUFFER_BIT); 	
+				gl.enable(gl.DEPTH_TEST);
+			}
+			
+			function initShaders()
+			{
+				//get shader sources with jQuery Ajax
+				$.ajax({
+				    async: false,
+				    url: './01_gravity.vs',
+				    success: function (data) {
+				        vs_source = data.firstChild.textContent;
+				    },
+				    dataType: 'xml'
+				});
+
+				$.ajax({
+				    async: false,
+				    url: './01_gravity.fs',
+				    success: function (data) {
+				        fs_source = data.firstChild.textContent;
+				    },
+				    dataType: 'xml'
+				});
+
+				//compile shaders	
+                vertexShader = makeShader(vs_source, gl.VERTEX_SHADER);
+				fragmentShader = makeShader(fs_source, gl.FRAGMENT_SHADER);
+				
+				//create program
+				glProgram = gl.createProgram();
+				
+				//attach and link shaders to the program
+                gl.attachShader(glProgram, vertexShader);
+                gl.attachShader(glProgram, fragmentShader);
+                gl.linkProgram(glProgram);
+
+                if (!gl.getProgramParameter(glProgram, gl.LINK_STATUS)) {
+                    alert("Unable to initialize the shader program.");
+                }
+				
+				//use program
+				gl.useProgram(glProgram);
+			}
+			
+			function makeShader(src, type)
+			{
+				//compile the vertex shader
+				var shader = gl.createShader(type);
+                gl.shaderSource(shader, src);
+                gl.compileShader(shader);
+
+                if (!gl.getShaderParameter(shader, gl.COMPILE_STATUS)) {
+                    alert("Error compiling shader: " + gl.getShaderInfoLog(shader));
+                }
+				return shader;
+			}
+
+			function searchForObject(arr, index)
+			{
+				for(var i in arr)
+				{
+					if(arr[i].vbo_index == index)
+					{
+						return i;
+					}	
+				}
+				return -1;
+			}
+			
+			function drawScene()
+			{
+		
+				for(var i=0; i < vertexIndexBuffers.length; ++i)
+				{
+
+					mat4.identity(mvMatrix);
+					mat4.translate(mvMatrix, [0.0, -1.0, -15.5]);              		
+					mat4.rotate(mvMatrix, -0.3, [-0.3, 0.0, 0.2]);              
+					mat4.rotate(mvMatrix, 90, [0.0, 1.0, 0.0]);     
+
+					var n = searchForObject(sceneElements, i);
+					if( n != -1)
+					{
+						if( (INITIAL_HEIGHT_TRANSLATION_OF_SPHERES - sceneElements[n].position.y - sceneElements[n].radius) > GROUND_Y)
+						{
+
+							sceneElements[n].velocity.y += sceneElements[n].acceleration.y; 
+							sceneElements[n].position.y += sceneElements[n].velocity.y; 
+						}else{
+							//help prevent getting stuck
+							sceneElements[n].position.y -= sceneElements[n].velocity.y; 
+
+							sceneElements[n].velocity.y *= ELASTICITY;
+							
+						}
+
+						if(sceneElements[n].position.x > PLANE_SIZE || sceneElements[n].position.x < -PLANE_SIZE)
+						{	
+							sceneElements[n].position.x += (-1.0*sceneElements[n].velocity.x); 
+							sceneElements[n].velocity.x *= -1.0;						
+						}else{
+							sceneElements[n].position.x += sceneElements[n].velocity.x; 
+						}
+
+						if(sceneElements[n].position.z > PLANE_SIZE || sceneElements[n].position.z < -PLANE_SIZE)
+						{
+							sceneElements[n].position.z += (-1.0*sceneElements[n].velocity.z); 
+							sceneElements[n].velocity.z *= -1.0;							
+						}else{
+							sceneElements[n].position.z += sceneElements[n].velocity.z; 
+						}
+						
+						mat4.translate(mvMatrix, [sceneElements[n].position.x, 
+												INITIAL_HEIGHT_TRANSLATION_OF_SPHERES  - sceneElements[n].position.y, 
+												sceneElements[n].position.z]);             
+					}
+					            
+	    			
+	    			mat4.toInverseMat3(mvMatrix, normalMatrix);
+		   			mat3.transpose(normalMatrix);
+					setMatrixUniforms();
+
+					gl.bindBuffer(gl.ARRAY_BUFFER, trianglesVerticeBuffers[i]);
+					gl.vertexAttribPointer(vertexPositionAttribute, 3, gl.FLOAT, false, 0, 0);
+
+					gl.bindBuffer(gl.ARRAY_BUFFER, trianglesColorBuffers[i]);
+					gl.vertexAttribPointer(vertexColorAttribute, 4, gl.FLOAT, false, 0, 0);
+
+					gl.bindBuffer(gl.ARRAY_BUFFER, trianglesNormalBuffers[i]);
+					gl.vertexAttribPointer(vertexNormalAttribute, 3, gl.FLOAT, false, 0, 0);
+					
+					gl.bindBuffer(gl.ELEMENT_ARRAY_BUFFER, vertexIndexBuffers[i]);
+					gl.drawElements(gl.TRIANGLES, vertexIndexBuffers[i].numItems, gl.UNSIGNED_SHORT, 0);
+				}
+			}
+			
+			function getMatrixUniforms(){
+                glProgram.pMatrixUniform = gl.getUniformLocation(glProgram, "uPMatrix");
+                glProgram.mvMatrixUniform = gl.getUniformLocation(glProgram, "uMVMatrix");          
+                glProgram.normalMatrixUniform = gl.getUniformLocation(glProgram, "uNormalMatrix");          
+            }
+			
+			function setMatrixUniforms() {       
+                gl.uniformMatrix4fv(glProgram.mvMatrixUniform, false, mvMatrix);
+                gl.uniformMatrix3fv(glProgram.normalMatrixUniform, false, normalMatrix);
+            }   
+		</script>
+	</head>
+	<body onload="initWebGL()">
+		<canvas id="my-canvas" width="500" height="500">
+		Your browser does not support the HTML5 canvas element.
+		</canvas>
+	</body>
+</html>

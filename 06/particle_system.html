@@ -1,0 +1,253 @@
+<!doctype html>
+<html>
+	<head>
+		<title>Particle Systems</title>
+		<style>
+			body{ background-color: grey; }
+			canvas{ background-color: white; }
+		</style>
+        <script src="//code.jquery.com/jquery.min.js"></script>
+		<script src="/beginningwebgl/code/lib/webgl-debug.js"></script>
+		<script src="/beginningwebgl/code/lib/gl-matrix-min.js"></script>
+		<script src="/beginningwebgl/code/lib/raf_polyfill.js"></script>
+   		<script src="/beginningwebgl/code/06/particle.js"></script>
+      	<script>
+			var gl = null,
+				canvas = null,
+				glProgram = null,
+				fragmentShader = null,
+				vertexShader = null;
+
+			var numParticles = 1000;	
+				
+			var mvMatrix = mat4.create(),
+				pMatrix = mat4.create();
+				
+			var vertexPositionAttribute = null,
+				vertexColorAttribute = null,
+				particles = [],
+				positions = [],
+            	colors = [];
+
+				pointLocationBuffer = null,
+				pointColorBuffer = null,
+				vertexIndexBuffer = null;
+
+			var paused = false;
+			$(document).keyup(function(evt){
+                switch(evt.keyCode){
+	                case 80: //'p'
+	                    paused =!paused;
+	                    break;	                
+	                default:
+	                	break;    
+	            }    	
+		    });	  
+	
+
+			function initWebGL()
+			{
+				canvas = document.getElementById("my-canvas");  
+				try{
+					gl = canvas.getContext("webgl") || canvas.getContext("experimental-webgl");					
+				}catch(e){
+				}
+								
+				if(gl)
+				{
+					gl = WebGLDebugUtils.makeDebugContext(gl);
+
+					initShaders();
+					setupParticles(numParticles);
+
+					vertexPositionAttribute = gl.getAttribLocation(glProgram, "aVertexPosition");
+					vertexColorAttribute = gl.getAttribLocation(glProgram, "aVertexColor");
+	                gl.enableVertexAttribArray(vertexPositionAttribute);
+	                gl.enableVertexAttribArray(vertexColorAttribute);
+    			    
+    			    gl.viewport(0, 0, canvas.width, canvas.height);
+					getMatrixUniforms();
+
+					pointLocationBuffer = gl.createBuffer();
+					pointColorBuffer = gl.createBuffer();
+				
+					(function animLoop(){
+						if(!paused){
+							setupWebGL();
+
+							mat4.perspective(45, canvas.width / canvas.height, 0.1, 100.0, pMatrix);
+							mat4.identity(mvMatrix);
+							mat4.translate(mvMatrix, [0.0, 0.0, -4.0]);              
+							//mat4.rotate(mvMatrix, angle, [0.0, 1.0, 0.0]);              
+							//angle += 0.01;
+
+							adjustParticles();
+							setBufferData();
+							setMatrixUniforms();
+
+							drawScene();
+						}
+						requestAnimationFrame(animLoop, canvas);
+					})();
+				}else{	
+					alert(  "Error: Your browser does not appear to support WebGL.");
+				}
+			}
+			
+			function setupWebGL()
+			{
+				//set the clear color to a shade of green
+				gl.clearColor(0.1, 0.1, 0.1, 1.0); 	
+				gl.clear(gl.COLOR_BUFFER_BIT); 	
+				
+				gl.disable(gl.DEPTH_TEST);
+				gl.enable(gl.BLEND);
+				gl.blendFunc(gl.SRC_ALPHA, gl.ONE_MINUS_SRC_ALPHA);
+			}
+
+			function initShaders()
+			{
+				var vs_source = null,
+					fs_source = null;
+
+				//get shader sources with jQuery Ajax
+				$.ajax({
+				    async: false,
+				    url: './particle_systems.vs',
+				    success: function (data) {
+				        vs_source = data.firstChild.textContent;
+				    },
+				    dataType: 'xml'
+				});
+
+				$.ajax({
+				    async: false,
+				    url: './particle_systems.fs',
+				    success: function (data) {
+				        fs_source = data.firstChild.textContent;
+				    },
+				    dataType: 'xml'
+				});
+
+				//compile shaders	
+                vertexShader = makeShader(vs_source, gl.VERTEX_SHADER);
+				fragmentShader = makeShader(fs_source, gl.FRAGMENT_SHADER);
+				
+				//create program
+				glProgram = gl.createProgram();
+				
+				//attach and link shaders to the program
+                gl.attachShader(glProgram, vertexShader);
+                gl.attachShader(glProgram, fragmentShader);
+                gl.linkProgram(glProgram);
+
+                if (!gl.getProgramParameter(glProgram, gl.LINK_STATUS)) {
+                    alert("Unable to initialize the shader program.");
+                }
+				
+				//use program
+				gl.useProgram(glProgram);
+			}
+			
+			function makeShader(src, type)
+			{
+				//compile the vertex shader
+				var shader = gl.createShader(type);
+                gl.shaderSource(shader, src);
+                gl.compileShader(shader);
+
+                if (!gl.getShaderParameter(shader, gl.COMPILE_STATUS)) {
+                    alert("Error compiling shader: " + gl.getShaderInfoLog(shader));
+                }
+				return shader;
+			}
+			
+			function drawScene()
+			{
+				gl.bindBuffer(gl.ARRAY_BUFFER, pointLocationBuffer);
+				gl.vertexAttribPointer(vertexPositionAttribute, 3, gl.FLOAT, false, 0, 0);
+				gl.bindBuffer(gl.ARRAY_BUFFER, pointColorBuffer);
+				gl.vertexAttribPointer(vertexColorAttribute, 4, gl.FLOAT, false, 0, 0);
+
+				gl.drawArrays(gl.POINTS, 0, positions.length/3);
+			}
+
+            function setupParticles(num){
+            	
+            	for(var n=0; n<num; ++n)
+            	{            		
+            		particles[n] = new Particle();
+            	}
+
+            	positions = [];
+            	for(var n=0; n<particles.length; ++n)
+            	{
+            		positions.push(particles[n].position[0]);	
+            		positions.push(particles[n].position[1]);	
+            		positions.push(particles[n].position[2]);	
+            	}
+
+            	colors = [];
+            	for(var n=0; n<particles.length; ++n)
+            	{
+            		colors.push(particles[n].color[0]);	
+            		colors.push(particles[n].color[1]);	
+            		colors.push(particles[n].color[2]);	
+            		colors.push(particles[n].color[3]);	
+            	}
+            }
+
+            function adjustParticles(){
+            	for(var n=0; n<particles.length; ++n)
+            	{
+            		particles[n].update();
+            	}
+
+            	positions = [];
+            	for(var n=0; n<particles.length; ++n)
+            	{
+            		positions.push(particles[n].position[0]);	
+            		positions.push(particles[n].position[1]);	
+            		positions.push(particles[n].position[2]);	
+            	}
+
+            	colors = [];
+            	for(var n=0; n<particles.length; ++n)
+            	{
+            		colors.push(particles[n].color[0]);	
+            		colors.push(particles[n].color[1]);	
+            		colors.push(particles[n].color[2]);	
+            		colors.push(particles[n].color[3]);	
+            	}
+            }
+
+            function setBufferData()
+            {
+				gl.bindBuffer(gl.ARRAY_BUFFER, pointLocationBuffer);
+				gl.bufferData(gl.ARRAY_BUFFER, new Float32Array(positions), gl.STATIC_DRAW);
+				pointLocationBuffer.itemSize = 3;
+				pointLocationBuffer.numItems = positions.length / 3;
+
+				gl.bindBuffer(gl.ARRAY_BUFFER, pointColorBuffer);
+				gl.bufferData(gl.ARRAY_BUFFER, new Float32Array(colors), gl.STATIC_DRAW);
+				pointColorBuffer.itemSize = 4;
+				pointColorBuffer.numItems = colors.length / 4;        	
+            }
+
+            function getMatrixUniforms(){
+                glProgram.pMatrixUniform = gl.getUniformLocation(glProgram, "uPMatrix");
+                glProgram.mvMatrixUniform = gl.getUniformLocation(glProgram, "uMVMatrix");          
+            }
+			
+			function setMatrixUniforms() {
+                gl.uniformMatrix4fv(glProgram.pMatrixUniform, false, pMatrix);
+                gl.uniformMatrix4fv(glProgram.mvMatrixUniform, false, mvMatrix);
+            }
+		</script>
+	</head>
+	<body onload="initWebGL()">
+		<canvas id="my-canvas" width="500" height="500">
+		Your browser does not support the HTML5 canvas element.
+		</canvas>
+	</body>
+</html>

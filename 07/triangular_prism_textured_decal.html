@@ -1,0 +1,280 @@
+<!doctype html>
+<html>
+	<head>
+		<title>three.js Triangular Prism Textured Decal</title>
+		<style>
+			body{ background-color: grey; }
+			canvas{ background-color: white; }
+		</style>
+        <script src="//code.jquery.com/jquery.min.js"></script>
+		<script src="/beginningwebgl/code/lib/three.js/build/Three.js"></script>
+		<script>
+			var CANVAS_WIDTH = 400,
+				CANVAS_HEIGHT= 300;
+
+			var renderer = null,	//WebGL or 2D
+				scene = null,		//scene object
+				camera = null;		//camera object
+			
+			var texture = [],
+				textureImage = [],
+				STONE_TEXTURE = 0,
+				WEBGL_LOGO_TEXTURE = 1;
+
+			var mesh = null,
+				geometry = null,
+				triangleVertices = [],
+				angle = 0;	
+
+			var uniforms = null,
+				shaderMaterial = null;
+
+			function initWebGL()
+			{
+				setupRenderer();
+				setupScene();
+				setupCamera();
+
+				var original_mesh_x = mesh.position.x;
+				(function animLoop(){
+					//rotate mesh round y-axis
+					mesh.position.x = original_mesh_x + 2.0*Math.cos(angle);
+					mesh.rotation.y = angle;
+					angle += 0.01;
+
+					renderer.render(scene, camera);	
+					requestAnimationFrame( animLoop );
+				})();
+			}
+
+			function setupTexture()
+			{
+				texture[STONE_TEXTURE] = THREE.ImageUtils.loadTexture(
+						"/beginningwebgl/code/textures/stone-128px.jpg",
+						{}, function() {
+						texture[WEBGL_LOGO_TEXTURE] = THREE.ImageUtils.loadTexture(
+							"/beginningwebgl/code/textures/webgl_logo-512px.png",
+							{}, function() {
+								for(var i=0; i<texture.length;++i)
+								{
+									texture[i].wrapT = texture[i].wrapS = THREE.RepeatWrapping;				
+									texture[i].needsUpdate = true;			
+								}
+								initWebGL();
+							}
+						);
+					}
+				);
+			}
+
+			function setupRenderer()
+			{
+				renderer = new THREE.WebGLRenderer( { clearColor: 0x007700, clearAlpha: 1 } );
+				renderer.setSize( CANVAS_WIDTH, CANVAS_HEIGHT );
+			
+				//where to add the canvas element
+				document.body.appendChild(  renderer.domElement );
+			}
+
+			function setupScene()
+			{
+				geometry = new THREE.Geometry();
+				scene = new THREE.Scene();		
+				addMesh();
+			}
+
+			function setupCamera()
+			{
+				camera = new THREE.PerspectiveCamera(
+				    45,         					// Field of view
+				    CANVAS_WIDTH / CANVAS_HEIGHT,  	// Aspect ratio
+				    .1,    						    // Near clip plane
+				    10000  					        // Far clip plane
+				);
+
+				camera.position.set( 0, 0, -10 );
+				camera.lookAt( scene.position );
+				scene.add( camera );
+			}
+
+			function setupShaderMaterial()
+			{
+				uniforms = {
+					uSampler: { type: "t", value: 0, texture: texture[STONE_TEXTURE] },
+					uSampler2: { type: "t", value: 1, texture: texture[WEBGL_LOGO_TEXTURE] }
+				};
+
+				var vs_source = null,
+					fs_source = null;
+
+				//get shader sources with jQuery Ajax
+				$.ajax({
+				    async: false,
+				    url: './multitexture.vs',
+				    success: function (data) {
+				        vs_source = data.firstChild.textContent;
+				    },
+				    dataType: 'xml'
+				});
+
+				$.ajax({
+				    async: false,
+				    url: './multitexture.fs',
+				    success: function (data) {
+				        fs_source = data.firstChild.textContent;
+				    },
+				    dataType: 'xml'
+				});
+
+				shaderMaterial = new THREE.ShaderMaterial( {
+					uniforms: uniforms,
+					vertexShader: vs_source,
+					fragmentShader: fs_source					
+				} );
+			}
+
+			function addMesh()
+			{
+				//12 vertices
+				var triangleVertices = [ 
+					//front face
+					//bottom left to right,  to top
+					0.0, 0.0, 0.0,
+					1.0, 0.0, 0.0,
+					2.0, 0.0, 0.0,
+					0.5, 1.0, 0.0,
+					1.5, 1.0, 0.0,
+					1.0, 2.0, 0.0,
+					
+					//rear face
+					0.0, 0.0, -2.0,
+					1.0, 0.0, -2.0,
+					2.0, 0.0, -2.0,
+					0.5, 1.0, -2.0,
+					1.5, 1.0, -2.0,
+					1.0, 2.0, -2.0
+				];
+			
+				var triangleVerticeColors = [ 
+					//front face	
+					 0.0, 0.0, 1.0,
+					 1.0, 1.0, 1.0,
+					 0.0, 0.0, 1.0,
+					 0.0, 0.0, 1.0,
+					 0.0, 0.0, 1.0,
+					 1.0, 1.0, 1.0,
+				
+					//rear face
+					 0.0, 1.0, 1.0,
+					 1.0, 1.0, 1.0,
+					 0.0, 1.0, 1.0,
+					 0.0, 1.0, 1.0,
+					 0.0, 1.0, 1.0,
+					 1.0, 1.0, 1.0
+				];
+
+				//setup vertice buffers
+				//16 triangles
+				var triangleVertexIndices = [ 
+					0,1,3,			//front face
+					1,4,3,	//flipped
+					1,2,4,
+					3,4,5,	
+
+					6,7,9,			//rear face
+					7,10,9,	//flipped
+					7,8,10,
+					9,10,11,
+					
+					0,6,3,//flipped			//left side
+					3,6,9,
+					3,9,5,//flipped
+					5,9,11,
+					
+					2,8,4,//flipped			//right side
+					4,8,10,
+					4,10,5,//flipped
+					5,10,11
+				];
+
+				var colors = [];
+
+				var uvs = [];
+				for(var i=0; i<triangleVertexIndices.length; i += 3)
+				{
+					var vertex = new THREE.Vector3();
+					var color = new THREE.Color();
+					vertex.set(
+							triangleVertices[i],
+							triangleVertices[i + 1],
+							triangleVertices[i + 2]						
+						);
+					geometry.vertices.push(vertex);
+					
+					var tex = [];
+					for(var j=0; j<3;++j)
+					{
+						var a = triangleVertexIndices[i+j];
+						var s = null,
+							t = null;
+
+						if(i >= 24)
+						{
+							s = triangleVertices[a*3 + 1];
+							t = triangleVertices[a*3 + 2];
+						}else{
+							s = triangleVertices[a*3];
+							t = triangleVertices[a*3 + 1];
+						}	
+						tex.push(new THREE.UV(s, t));
+					}
+					uvs.push(tex);
+					
+					color.setRGB(
+						triangleVerticeColors[i],
+						triangleVerticeColors[i + 1],
+						triangleVerticeColors[i + 2]						
+					);
+					colors.push(color);
+				}
+
+				for(var i=0; i<triangleVertexIndices.length; i += 3)
+				{
+					geometry.faces.push( new THREE.Face3(
+						triangleVertexIndices[i],
+						triangleVertexIndices[i + 1],
+						triangleVertexIndices[i + 2]
+					) );
+				}
+
+				geometry.faceVertexUvs = [];
+				for(var z=0;z<uvs.length;z++){
+					geometry.faceVertexUvs.push(uvs);					
+				}
+
+				var f = 0;				 
+				for(var i=0; i<triangleVertexIndices.length; i +=3 )
+				{				
+					geometry.faces[f].vertexColors.push(colors[triangleVertexIndices[i]]);
+					geometry.faces[f].vertexColors.push(colors[triangleVertexIndices[i + 1]]);
+					geometry.faces[f].vertexColors.push(colors[triangleVertexIndices[i + 2]]);
+				
+					++f;
+				}
+
+				geometry.dynamic = true;
+				
+				setupShaderMaterial();
+
+				mesh = new THREE.Mesh( 
+					geometry,
+					shaderMaterial 
+				);
+
+				mesh.doubleSided = true;
+				scene.add(mesh);
+			}
+		</script>
+	</head>
+	<body onload="setupTexture()"></body>
+</html>

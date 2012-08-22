@@ -1,0 +1,128 @@
+<!doctype html>
+<html>
+	<head>
+		<title>Bowtie Color</title>
+		<style>
+			body{ background-color: grey; }
+			canvas{ background-color: white; }
+		</style>
+		 <script src="/beginningwebgl/code/lib/three.js/build/Three.js"></script>
+		<script>
+			var CANVAS_WIDTH = 400,
+				CANVAS_HEIGHT= 300;
+
+			var renderer = null,	//WebGL or 2D
+				scene = null,		//scene object
+				camera = null;		//camera object
+			
+			function initWebGL()
+			{
+				setupRenderer();
+				setupScene();
+				setupCamera();
+
+				renderer.render(scene, camera);
+			}
+
+			function setupRenderer()
+			{
+				renderer = new THREE.WebGLRenderer( { clearColor: 0x007700, clearAlpha: 1 } );
+				renderer.setSize( CANVAS_WIDTH, CANVAS_HEIGHT );
+			
+				//where to add the canvas element
+				document.body.appendChild(  renderer.domElement );
+			}
+
+			function setupScene()
+			{
+				scene = new THREE.Scene();				
+				addMesh();
+			}
+
+			function setupCamera()
+			{
+				camera = new THREE.PerspectiveCamera(
+				    45,         					// Field of view
+				    CANVAS_WIDTH / CANVAS_HEIGHT,  	// Aspect ratio
+				    .1,    						    // Near clip plane
+				    10000  					        // Far clip plane
+				);
+				camera.position.set( 0, 0, -3 );
+				camera.lookAt( scene.position );
+				scene.add( camera );
+			}
+
+			function addMesh()
+			{
+				var triangleVertices = [ 
+					//left triangle	
+					-0.5, 0.5, 0.0,
+					 0.0, 0.0, 0.0,
+					-0.5, -0.5, 0.0,
+				
+					//right triangle
+					0.5, 0.5, 0.0,
+					0.0, 0.0, 0.0,
+					0.5, -0.5, 0.0
+				];
+
+				var triangleVerticeColors = [ 
+					//left triangle	
+					 1.0, 0.0, 0.0,
+					 1.0, 1.0, 1.0,
+					 1.0, 0.0, 0.0,
+				
+					//right triangle
+					0.0, 0.0, 1.0,
+					0.0, 0.0, 1.0,
+					1.0, 1.0, 1.0,
+				];
+
+				var geometry = new THREE.Geometry();
+				var colors = [];
+
+				for(var i=0; i<triangleVertices.length; i += 3)
+				{
+					var vertex = new THREE.Vector3();
+					var color = new THREE.Color();
+					vertex.set(
+							triangleVertices[i],
+							triangleVertices[i + 1],
+							triangleVertices[i + 2]						
+						);
+					geometry.vertices.push(vertex);
+				
+					color.setRGB(
+						triangleVerticeColors[i],
+						triangleVerticeColors[i + 1],
+						triangleVerticeColors[i + 2]						
+					);
+					colors.push(color);
+				}
+
+				geometry.faces.push( new THREE.Face3(0, 1, 2) );
+				geometry.faces.push( new THREE.Face3(3, 5, 4) );
+			
+				var f = 0;
+				for(var i=0; i<colors.length; i+=3)
+				{					
+					geometry.faces[f].vertexColors.push(colors[i]);
+					geometry.faces[f].vertexColors.push(colors[i+1]);
+					geometry.faces[f].vertexColors.push(colors[i+2]);
+					++f;
+				}
+
+				var mesh = new THREE.Mesh( 
+					geometry, 
+					new THREE.MeshBasicMaterial( 
+							{ 
+							  vertexColors: THREE.VertexColors						
+							} 
+						)
+				);
+				scene.add(mesh);
+			}
+		</script>
+	</head>
+	<body onload="initWebGL()"></body>
+</html>

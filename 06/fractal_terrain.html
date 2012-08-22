@@ -1,0 +1,327 @@
+<!doctype html>
+<html>
+	<head>
+		<title>HeightField</title>
+		<style>
+			body{ background-color: grey; }
+			canvas{ background-color: white; }
+		</style>
+        <script src="//code.jquery.com/jquery.min.js"></script>
+		<script src="/beginningwebgl/code/lib/webgl-debug.js"></script>		
+		<script src="/beginningwebgl/code/lib/gl-matrix-min.js"></script>
+   		<script src="/beginningwebgl/code/lib/raf_polyfill.js"></script>
+		<script>
+			var gl = null,
+				canvas = null,
+				glProgram = null,
+				fragmentShader = null,
+				vertexShader = null;
+				
+			var vertexPositionAttribute = null,
+				trianglesVerticeBuffer = null,
+				vertexIndexBuffer = null;
+
+			var mvMatrix = mat4.create(),
+				pMatrix = mat4.create();
+			var vertexPositionData = [];
+			
+			//mouse events	
+			var capture = false;
+           	var start = 0;
+			
+			var angleX = 0.0,
+				angleY = 0.0;	
+
+			var paused = false;
+			$(document).keyup(function(evt){
+                switch(evt.keyCode){
+	                case 80: //'p'
+	                    paused =!paused;
+	                    break;	                
+	                default:
+	                	break;    
+	            }    	
+		    });	 
+
+			function initWebGL()
+			{
+				canvas = document.getElementById("my-canvas");  
+				try{
+					gl = canvas.getContext("webgl") || canvas.getContext("experimental-webgl");					
+				}catch(e){
+				}
+								
+				if(gl)
+				{
+					gl = WebGLDebugUtils.makeDebugContext(gl);
+
+					initShaders();
+					createGrid(7.0, 7);
+					getMatrixUniforms();
+					
+					vertexPositionAttribute = gl.getAttribLocation(glProgram, "aVertexPosition");
+	                gl.enableVertexAttribArray(vertexPositionAttribute);
+    			    
+    			    gl.viewport(0, 0, canvas.width, canvas.height);
+
+					(function animLoop(){
+						if(!paused){
+							setMatrixUniforms()
+							setupWebGL();
+							drawScene(); 
+						}
+						requestAnimationFrame(animLoop, canvas);
+					})();
+				}else{	
+					alert(  "Error: Your browser does not appear to support WebGL.");
+				}
+			}
+
+			function getMatrixUniforms(){
+                glProgram.pMatrixUniform = gl.getUniformLocation(glProgram, "uPMatrix");
+                glProgram.mvMatrixUniform = gl.getUniformLocation(glProgram, "uMVMatrix");          
+				glProgram.samplerUniform = gl.getUniformLocation(glProgram, "uSampler");
+            }
+			
+			function setMatrixUniforms() {
+				mat4.perspective(45, canvas.width / canvas.height, 0.1, 100.0, pMatrix);
+				mat4.identity(mvMatrix);
+				mat4.translate(mvMatrix, [0.0, -2.0, -6.0]);              
+				mat4.rotate(mvMatrix, angleX*2*Math.PI/180.0, [0.0, 1.0, 0.0]);              
+				mat4.rotate(mvMatrix, angleY*2*Math.PI/180.0, [1.0, 0.0, 0.0]);              
+							
+                gl.uniformMatrix4fv(glProgram.pMatrixUniform, false, pMatrix);
+                gl.uniformMatrix4fv(glProgram.mvMatrixUniform, false, mvMatrix);
+            }
+			
+			function setupWebGL()
+			{
+				//set the clear color to a shade of green
+				gl.clearColor(0.1, 0.1, 0.1, 1.0); 	
+				gl.clear(gl.COLOR_BUFFER_BIT | gl.DEPTH_BUFFER_BIT); 	
+				gl.enable(gl.DEPTH_TEST);
+			}
+			
+			function initShaders()
+			{
+				var vs_source = null,
+					fs_source = null;	
+
+				//get shader sources with jQuery Ajax
+				$.ajax({
+				    async: false,
+				    url: './fractal_terrain.vs',
+				    success: function (data) {
+				        vs_source = data.firstChild.textContent;
+				    },
+				    dataType: 'xml'
+				});
+
+				$.ajax({
+				    async: false,
+				    url: './fractal_terrain.fs',
+				    success: function (data) {
+				        fs_source = data.firstChild.textContent;
+				    },
+				    dataType: 'xml'
+				});
+
+				//compile shaders	
+                vertexShader = makeShader(vs_source, gl.VERTEX_SHADER);
+				fragmentShader = makeShader(fs_source, gl.FRAGMENT_SHADER);
+				
+				//create program
+				glProgram = gl.createProgram();
+				
+				//attach and link shaders to the program
+                gl.attachShader(glProgram, vertexShader);
+                gl.attachShader(glProgram, fragmentShader);
+                gl.linkProgram(glProgram);
+
+                if (!gl.getProgramParameter(glProgram, gl.LINK_STATUS)) {
+                    alert("Unable to initialize the shader program.");
+                }
+				
+				//use program
+				gl.useProgram(glProgram);
+			}
+			
+			function makeShader(src, type)
+			{
+				//compile the vertex shader
+				var shader = gl.createShader(type);
+                gl.shaderSource(shader, src);
+                gl.compileShader(shader);
+
+                if (!gl.getShaderParameter(shader, gl.COMPILE_STATUS)) {
+                    alert("Error compiling shader: " + gl.getShaderInfoLog(shader));
+                }
+				return shader;
+			}
+			
+			function drawScene()
+			{
+				gl.bindBuffer(gl.ARRAY_BUFFER, trianglesVerticeBuffer);
+				gl.vertexAttribPointer(vertexPositionAttribute, 3, gl.FLOAT, false, 0, 0);
+
+				gl.bindBuffer(gl.ELEMENT_ARRAY_BUFFER, vertexIndexBuffer);
+				gl.drawElements(gl.TRIANGLE_STRIP, vertexIndexBuffer.numItems, gl.UNSIGNED_SHORT, 0);
+				//gl.drawElements(gl.POINTS, vertexIndexBuffer.numItems, gl.UNSIGNED_SHORT, 0);
+			}
+
+			function midpointDisplacement(tl, tr, bl, br, divisions,iteration)
+			{				
+				if( (tl[0] + 1) == br[0] || 	(tl[1] + 1) == br[1] )
+				{
+					return;
+				}
+
+				//array indices
+				var midpoint = [	(tl[0] + br[0])/2, 
+									(tl[1] + br[1])/2
+								];
+				
+				var left_mp = [	tl[0], 
+								(tl[1] + bl[1])/2
+								];
+				var right_mp = [ tr[0], 
+								 (tr[1] + br[1])/2
+								 ];
+				var top_mp = [	(tl[0] + tr[0])/2, 
+								tl[1]
+							];
+				var bottom_mp = [	(bl[0] + br[0])/2, 
+									bl[1]]; 
+
+				//current height values
+				var tl_height = vertexPositionData[(tl[0] + tl[1] * (divisions+1))*3+1];
+				var tr_height = vertexPositionData[(tr[0] + tr[1] * (divisions+1))*3+1];
+				var bl_height = vertexPositionData[(bl[0] + bl[1] * (divisions+1))*3+1];
+				var br_height = vertexPositionData[(br[0] + br[1] * (divisions+1))*3+1];
+
+				//computer five new points
+				var top_value = (tl_height + tr_height)/2.0;
+				vertexPositionData[(top_mp[0] + top_mp[1] * (divisions+1))*3+1] = top_value;
+				var bottom_value = (bl_height + br_height)/2.0;
+				vertexPositionData[(bottom_mp[0] + bottom_mp[1] * (divisions+1))*3+1] = bottom_value;
+			
+				var left_value = (tl_height + bl_height)/2.0;
+				vertexPositionData[(left_mp[0] + left_mp[1] * (divisions+1))*3+1] = left_value;
+				var right_value = (tr_height + br_height)/2.0;
+				vertexPositionData[(right_mp[0] + right_mp[1] * (divisions+1))*3+1] = right_value;
+
+				//midpoint has random term
+				vertexPositionData[(midpoint[0] + midpoint[1] * (divisions+1)) * 3 + 1] = (tl_height+tr_height+bl_height+br_height)/4.0 
+					+(-0.5+Math.random())*Math.pow(0.65, iteration-2.0);
+
+				//repeat with four quads	
+				midpointDisplacement( tl, top_mp, left_mp, midpoint, divisions, iteration+1 );
+				midpointDisplacement( top_mp, tr, midpoint, right_mp, divisions, iteration+1 );
+				midpointDisplacement( left_mp, midpoint, bl, bottom_mp, divisions, iteration+1 );
+				midpointDisplacement( midpoint, right_mp, bottom_mp, br, divisions, iteration+1 );
+			}
+
+            function createGrid(size, power){
+				size = (typeof size !== 'undefined') ? size : 1.0;
+				divisions = (typeof power !== 'undefined') ? (Math.pow(2.0, power) ) : 8;
+				var segment_size = size/divisions;
+				vertexPositionData = [];
+				for(var i=0;i<=divisions;++i)
+				{
+					for(var j=0;j<=divisions;++j)
+					{
+						vertexPositionData.push(i*segment_size - 0.5*size);
+						vertexPositionData.push(0.0);
+						vertexPositionData.push(j*segment_size - 0.5*size);
+					}
+				}
+
+				//seed the corners
+				vertexPositionData[(0 + 0*(divisions+1))*3+1] = 1.5;
+				vertexPositionData[(divisions + 0*(divisions+1))*3+1] = 3.5;
+				vertexPositionData[(0 + divisions*(divisions+1))*3+1] = 2.0;
+				vertexPositionData[(divisions + divisions*(divisions+1))*3+1] = 1.0;
+
+				midpointDisplacement(
+					[0,0], 
+					[divisions, 0], 
+					[0, divisions], 
+					[divisions, divisions], 
+					divisions,0
+				);
+
+				var indexData = [0];
+				for(var row=0;row<divisions;++row)
+				{
+					if(row%2 == 0)
+					{
+						for(var i=0;i<=divisions;++i)
+						{
+							if(i!=0)
+							{
+								indexData.push( i + row*(divisions+1));								
+							}
+							indexData.push(i + (row+1)*(divisions+1));	
+
+						}
+					}else{
+						for(var i=0;i<=divisions;++i)
+						{
+							if(i!=0)
+							{
+								indexData.push( -(i+1) + (row+1)*(divisions+1));	
+							}
+							indexData.push(-(i+1) + (row+2)*(divisions+1));	
+						}						
+					}	
+				}
+
+				trianglesVerticeBuffer = gl.createBuffer();
+				gl.bindBuffer(gl.ARRAY_BUFFER, trianglesVerticeBuffer);
+				gl.bufferData(gl.ARRAY_BUFFER, new Float32Array(vertexPositionData), gl.STATIC_DRAW);
+				trianglesVerticeBuffer.itemSize = 3;
+				trianglesVerticeBuffer.numItems = vertexPositionData.length / 3;
+
+				vertexIndexBuffer = gl.createBuffer();
+				gl.bindBuffer(gl.ELEMENT_ARRAY_BUFFER, vertexIndexBuffer);
+				gl.bufferData(gl.ELEMENT_ARRAY_BUFFER, new Uint16Array(indexData), gl.STREAM_DRAW);
+				vertexIndexBuffer.itemSize = 3;
+				vertexIndexBuffer.numItems = indexData.length;
+            }
+
+            $(document).ready(function(){
+            	$("#my-canvas").on("mousedown", function (e){
+   					 capture = true;
+			    	 start = [e.pageX, e.pageY]; //0 to 500
+			    	 console.log("start:" + start);
+				});
+
+   				$("#my-canvas").on("mouseup", function (e){
+   					 capture = false;
+   					 console.log("end capture");
+				});
+			
+				 $("#my-canvas").mousemove(function(e) {
+				 	if(capture)
+				 	{
+	   				 	var x = (e.pageX - start[0]);
+	   				 	var y = (e.pageY - start[1]);
+						start[0] = e.pageX;
+						start[1] = e.pageY;
+
+	   				 	angleX += x;
+						angleY += y;
+
+             		//	console.log("Angle: (" + angleX + "," + angleY + ")");
+					}
+   				 });
+
+            });
+		</script>
+	</head>
+	<body onload="initWebGL()">
+		<canvas id="my-canvas" width="500" height="500">
+		Your browser does not support the HTML5 canvas element.
+		</canvas>
+	</body>
+</html>		

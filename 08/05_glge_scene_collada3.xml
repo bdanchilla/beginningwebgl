@@ -1,0 +1,9 @@
+<?xml version="1.0" ?>
+<glge>
+	<camera id="maincamera" loc_z="20" />
+	<scene id="mainscene" camera="#maincamera" ambient_color="#777">
+		<light id="mainlight" loc_y="15" type="L_POINT" />
+   		<collada document="/beginningwebgl/code/meshes/Taj_Mahal/models/model.dae" loc_x="0.0" loc_y="-2.0"
+             rot_x="0.3" rot_y="-0.7" scale=".0008" />
+	</scene>
+</glge>

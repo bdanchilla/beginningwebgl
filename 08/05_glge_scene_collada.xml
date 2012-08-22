@@ -1,0 +1,11 @@
+<?xml version="1.0" ?>
+<glge>
+	<camera id="maincamera" loc_z="20" />
+	<scene id="mainscene" camera="#maincamera" ambient_color="#fff">
+		<light id="mainlight" loc_y="5" type="L_POINT" />
+		<collada document="/beginningwebgl/code/meshes/Gorilla/models/Gorilla.dae" loc_x="0.8" loc_y="-3.0"
+             rot_x="0.0" rot_y="0.9" scale=".0012" />
+   		<collada document="/beginningwebgl/code/meshes/Elephant/models/Elephant.dae" loc_x="11.0" loc_y="-4.0"
+             rot_x="0.0" rot_y="0.0" scale="0.8" />
+	</scene>
+</glge>

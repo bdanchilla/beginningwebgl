@@ -1,0 +1,303 @@
+<!doctype html>
+<html>
+	<head>
+		<title>03 - Convolution Kernel</title>
+		<style>
+			body{ background-color: grey; }
+			canvas{ background-color: white; }
+		</style>
+        <script src="//code.jquery.com/jquery.min.js"></script>
+		<script src="/beginningwebgl/code/lib/webgl-debug.js"></script>
+		<script src="/beginningwebgl/code/lib/gl-matrix-min.js"></script>
+		<script src="/beginningwebgl/code/lib/raf_polyfill.js"></script>
+		<script>
+			var gl = null,
+				canvas = null,
+				glProgram = null,
+				fragmentShader = null,
+				vertexShader = null;
+				
+			var vertexPositionAttribute = null,
+				trianglesVerticeBuffer = null,
+				vertexIndexBuffer = null,
+				texture = null,
+				textureImage = null;
+			
+			var kernelUniform = null,
+				kernelWeightUniform = null,
+				kernels = null,
+				current_kernel = "no_effect";
+
+			$(document).ready(function(){
+				$("#filters").on('change', function(evt){
+					current_kernel = $(this).find(":selected").text();
+				});	
+			});
+
+			function loadTexture()
+			{
+				textureImage = new Image();				
+				textureImage.src = "/beginningwebgl/code/textures/dog-128px.jpg";
+			}
+
+			function setupTexture()
+			{
+				texture = gl.createTexture();
+				gl.bindTexture(gl.TEXTURE_2D, texture);
+                gl.pixelStorei(gl.UNPACK_FLIP_Y_WEBGL, true);
+                gl.texImage2D(gl.TEXTURE_2D, 0, gl.RGBA, gl.RGBA, gl.UNSIGNED_BYTE, textureImage);
+                gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MAG_FILTER, gl.NEAREST);
+                gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MIN_FILTER, gl.NEAREST);
+
+                if( !gl.isTexture(texture) )
+                {
+                	console.error("Error: Texture is invalid");
+                }
+
+				gl.generateMipmap(gl.TEXTURE_2D);
+				glProgram.samplerUniform = gl.getUniformLocation(glProgram, "uSampler");
+				gl.uniform1i(glProgram.samplerUniform, 0);
+
+				gl.uniform2f(
+						gl.getUniformLocation(glProgram, "uTexDimensions"), 
+						textureImage.width, 
+						textureImage.height
+				);
+			}
+
+			function sum_array(a)
+			{
+				var key, sum = 0;
+				for (key in a) {
+			        sum += a[key];
+			    }
+			    return sum;
+			}
+
+			function setKernels()
+			{
+				kernels = {
+					"no_effect": [
+						0, 0, 0,
+						0, 1, 0,
+						0, 0, 0
+					],
+					"sharpen": [
+						 0, -1, 0,
+						-1,  4, -1,
+						 0, -1, 0
+					],			    
+					"sharpen2":  [
+						-1, -1, -1,
+						-1,  8, -1,
+						-1, -1, -1
+					],
+					"sobel_edges_y":  [
+						-1, 0, 1,
+						-2, 0, 2,
+						-1, 0, 1
+					],
+					"sobel_edges_x": [
+						-1, -2, -1,
+						 0,  0,  0,
+						 1,  2,  1
+					],
+					"sobel_both": [
+						-2, -2, 0,
+						-2,  0, 2,
+						 0,  2, 2
+					],  
+					"blur": [
+						1, 1, 1,
+						1, 1, 1,
+						1, 1, 1
+					],
+					"gaussian_blur":[
+						0.045, 0.122, 0.045, 
+						0.122, 0.332, 0.122, 
+						0.045, 0.122, 0.045
+					],
+					"edge_detect":[
+						0, 1, 0, 
+						1, -4, 1, 
+						0, 1, 0
+					]    		 				
+				};
+
+				var sel = $("#filters").get(0);	
+				sel.options.length = 0;			
+				$.each(kernels, function (x) {
+					sel.options[sel.options.length] = new Option(x, x);
+				});
+			}				
+
+			function initWebGL()
+			{
+				canvas = document.getElementById("my-canvas");  
+				try{
+					gl = canvas.getContext("webgl") || canvas.getContext("experimental-webgl");					
+				}catch(e){
+				}
+								
+				if(gl)
+				{
+					gl = WebGLDebugUtils.makeDebugContext(gl);
+
+					initShaders();
+					createSquare();
+
+					vertexPositionAttribute = gl.getAttribLocation(glProgram, "aVertexPosition");
+	                gl.enableVertexAttribArray(vertexPositionAttribute);
+					kernelUniform = gl.getUniformLocation(glProgram, "uKernel");
+					kernelWeightUniform = gl.getUniformLocation(glProgram, "uKernelWeight");
+
+					loadTexture();
+					textureImage.onload = function() {
+						setupTexture();
+						setKernels();
+
+						(function animLoop(){
+							setupWebGL();
+		
+							//left
+							gl.uniform1fv(kernelUniform, kernels.no_effect);
+							gl.uniform1f(kernelWeightUniform, sum_array(kernels.no_effect) ) ;
+							gl.viewport(0, 0, canvas.width/3.0, canvas.height);
+							drawScene(); 
+							
+							var currentKernel = kernels[current_kernel].slice();
+							var currentKernelWeight = sum_array(currentKernel);
+
+							//center
+							gl.uniform1fv(kernelUniform, currentKernel);
+							gl.uniform1f(kernelWeightUniform, currentKernelWeight ) ;
+							gl.viewport(canvas.width/3.0, 0, canvas.width/3.0, canvas.height);
+							drawScene(); 
+
+							//right – kernel result added to our original image
+							if(current_kernel != "no_effect")
+							{
+								currentKernel[4] += 1;
+							}
+
+							gl.uniform1fv(kernelUniform, currentKernel);
+							gl.uniform1f(kernelWeightUniform, currentKernelWeight + 1 );
+							gl.viewport(2.0 * canvas.width/3.0, 0, canvas.width/3.0, canvas.height);
+							drawScene(); 
+							
+							requestAnimationFrame(animLoop, canvas);
+						})();			
+					}
+				}else{	
+					alert(  "Error: Your browser does not appear to support WebGL.");
+				}
+			}
+			
+			function setupWebGL()
+			{
+				gl.clearColor(0.1, 0.5, 0.1, 1.0); 	
+				gl.clear(gl.COLOR_BUFFER_BIT | gl.DEPTH_BUFFER_BIT); 	
+				gl.enable(gl.DEPTH_TEST);
+								
+			}
+			
+			function initShaders()
+			{
+				var vs_source = null,
+					fs_source = null;	
+
+				//get shader sources with jQuery Ajax
+				$.ajax({
+				    async: false,
+				    url: './03_convolution_kernel.vs',
+				    success: function (data) {
+				        vs_source = data.firstChild.textContent;
+				    },
+				    dataType: 'xml'
+				});
+
+				$.ajax({
+				    async: false,
+				    url: './03_convolution_kernel.fs',
+				    success: function (data) {
+				        fs_source = data.firstChild.textContent;
+				    },
+				    dataType: 'xml'
+				});
+
+				//compile shaders	
+                vertexShader = makeShader(vs_source, gl.VERTEX_SHADER);
+				fragmentShader = makeShader(fs_source, gl.FRAGMENT_SHADER);
+				
+				//create program
+				glProgram = gl.createProgram();
+				
+				//attach and link shaders to the program
+                gl.attachShader(glProgram, vertexShader);
+                gl.attachShader(glProgram, fragmentShader);
+                gl.linkProgram(glProgram);
+
+                if (!gl.getProgramParameter(glProgram, gl.LINK_STATUS)) {
+                    alert("Unable to initialize the shader program.");
+                }
+				
+				//use program
+				gl.useProgram(glProgram);
+			}
+			
+			function makeShader(src, type)
+			{
+				//compile the vertex shader
+				var shader = gl.createShader(type);
+                gl.shaderSource(shader, src);
+                gl.compileShader(shader);
+
+                if (!gl.getShaderParameter(shader, gl.COMPILE_STATUS)) {
+                    alert("Error compiling shader: " + gl.getShaderInfoLog(shader));
+                }
+				return shader;
+			}
+			
+			function drawScene()
+			{
+				gl.bindBuffer(gl.ARRAY_BUFFER, trianglesVerticeBuffer);
+				gl.vertexAttribPointer(vertexPositionAttribute, 3, gl.FLOAT, false, 0, 0);
+
+				gl.bindBuffer(gl.ELEMENT_ARRAY_BUFFER, vertexIndexBuffer);
+				gl.drawElements(gl.TRIANGLES, vertexIndexBuffer.numItems, gl.UNSIGNED_SHORT, 0);
+			}
+
+            function createSquare(size){
+				size = (typeof size !== 'undefined') ? size : 2.0;
+
+				var vertexPositionData = [
+					0.0, 0.0,  0.0,
+					-size/2.0, -size/2.0, 0.0,
+					size/2.0, -size/2.0, 0.0,
+					size/2.0, size/2.0, 0.0,
+					-size/2.0,size/2.0, 0.0,  	
+				];
+
+				var indexData = [0,1,2,0,2,3,0,3,4,0,4,1];
+
+				trianglesVerticeBuffer = gl.createBuffer();
+				gl.bindBuffer(gl.ARRAY_BUFFER, trianglesVerticeBuffer);
+				gl.bufferData(gl.ARRAY_BUFFER, new Float32Array(vertexPositionData), gl.STATIC_DRAW);
+				trianglesVerticeBuffer.itemSize = 3;
+				trianglesVerticeBuffer.numItems = vertexPositionData.length / 3;
+
+				vertexIndexBuffer = gl.createBuffer();
+				gl.bindBuffer(gl.ELEMENT_ARRAY_BUFFER, vertexIndexBuffer);
+				gl.bufferData(gl.ELEMENT_ARRAY_BUFFER, new Uint16Array(indexData), gl.STREAM_DRAW);
+				vertexIndexBuffer.itemSize = 3;
+				vertexIndexBuffer.numItems = indexData.length;
+            }
+		</script>
+	</head>
+	<body onload="initWebGL()">
+		<canvas id="my-canvas" width="768" height="256">
+		Your browser does not support the HTML5 canvas element.
+		</canvas>
+		<select style = 'vertical-align: top;' id="filters"></select>			
+	</body>
+</html>

@@ -1,0 +1,391 @@
+<!doctype html>
+<html>
+	<head>
+		<title>05 - Mandelbrot/Julia Interactive</title>
+		<style>
+			body{ background-color: grey; }
+			canvas{ background-color: white; float: left; }
+			form{ float: left; }
+			td{ vertical-align: top; }
+		</style>
+        <script src="//code.jquery.com/jquery.min.js"></script>
+		<script src="/beginningwebgl/code/lib/webgl-debug.js"></script>
+   		<script src="/beginningwebgl/code/lib/raf_polyfill.js"></script>
+		<script id="shader-fs" type="x-shader/x-fragment">
+          uniform highp vec2 uCseed;
+		  uniform highp float uZoom;
+		  uniform highp vec2 uOffset;
+		  uniform int uJulia;
+		  uniform highp vec3 uColor;
+		  uniform highp float uLightness;
+
+          varying highp vec2 position;
+		  const int MAX_ITERATIONS = 250;
+		  void main(void) {   		
+				highp vec2 z = vec2(position.x, position.y) * uZoom + uOffset;
+				highp vec2 c = z;
+				if(uJulia == 1)
+				{
+					c = uCseed;
+				}
+
+				highp vec4 color = vec4(0.0, 0.0, 0.0, 1.0);
+		
+				for (int i = 0; i < MAX_ITERATIONS; i++)
+				{
+					z = vec2(z.x*z.x - z.y*z.y, 2.0*z.x*z.y) + c;
+		            
+					if (dot(z, z) > 4.0)
+					{
+						highp float f =  uLightness*float(i) / float(MAX_ITERATIONS);
+						color = vec4(uColor*f, 1.0);
+						break;
+					}		
+				}
+				gl_FragColor = color;		
+			}
+		</script>
+      	<script>
+			var gl = null,
+				canvas = null,
+				glProgram = null,
+				fragmentShader = null,
+				vertexShader = null;
+				
+			var vertexPositionAttribute = null,
+				trianglesVerticeBuffer = null,
+				vertexIndexBuffer = null;
+
+			//uniform options
+			var c_seed = [0.0, 0.0],
+				zoom = 1.0,
+				offset = [-0.5, 0.0],
+				julia = 0,
+				color = [0.1, 0.1, 1.0],
+				lightness = 10.0;
+
+			//uniform locations	
+			var c_seed_uniform = null,
+				zoom_uniform = null,
+				offset_uniform = null,
+				julia_uniform = null,
+				color_uniform = null,
+				lightness_uniform = null;
+
+			function initWebGL()
+			{
+				canvas = document.getElementById("my-canvas");  
+				try{
+					gl = canvas.getContext("webgl") || canvas.getContext("experimental-webgl");					
+				}catch(e){
+				}
+								
+				if(gl)
+				{
+					gl = WebGLDebugUtils.makeDebugContext(gl);
+
+					initShaders();
+					createSquare();
+					
+					vertexPositionAttribute = gl.getAttribLocation(glProgram, "aVertexPosition");
+	                gl.enableVertexAttribArray(vertexPositionAttribute);
+    			    
+    			    gl.viewport(0, 0, canvas.width, canvas.height);
+
+					getUniformLocations();
+					(function animLoop(){
+							setUniforms();
+							setupWebGL();
+							drawScene();
+							requestAnimationFrame(animLoop, canvas);
+					})(); 
+				}else{	
+					alert(  "Error: Your browser does not appear to support WebGL.");
+				}
+			}
+
+			function getUniformLocations()
+			{
+				c_seed_uniform = gl.getUniformLocation(glProgram, "uCseed");
+				zoom_uniform = gl.getUniformLocation(glProgram, "uZoom");
+				offset_uniform = gl.getUniformLocation(glProgram, "uOffset");
+				julia_uniform = gl.getUniformLocation(glProgram, "uJulia");
+				color_uniform = gl.getUniformLocation(glProgram, "uColor");
+				lightness_uniform = gl.getUniformLocation(glProgram, "uLightness");
+			}
+			
+			function setUniforms() {       
+                gl.uniform2fv(c_seed_uniform, c_seed);
+                gl.uniform1f(zoom_uniform, zoom);
+                gl.uniform2fv(offset_uniform, offset);
+                gl.uniform1i(julia_uniform, julia);
+                gl.uniform3fv(color_uniform, color);
+                gl.uniform1f(lightness_uniform, lightness);
+            }  
+
+			function setupWebGL()
+			{
+				//set the clear color to a shade of green
+				gl.clearColor(0.1, 0.5, 0.1, 1.0); 	
+				gl.clear(gl.COLOR_BUFFER_BIT | gl.DEPTH_BUFFER_BIT); 	
+				gl.enable(gl.DEPTH_TEST);
+			}
+			
+			function initShaders()
+			{
+				var vs_source = null,
+					fs_source = document.getElementById("shader-fs").innerHTML;	
+
+				//get shader sources with jQuery Ajax
+				$.ajax({
+				    async: false,
+				    url: './03_mandelbrot.vs',
+				    success: function (data) {
+				        vs_source = data.firstChild.textContent;
+				    },
+				    dataType: 'xml'
+				});
+
+				//compile shaders	
+                vertexShader = makeShader(vs_source, gl.VERTEX_SHADER);
+				fragmentShader = makeShader(fs_source, gl.FRAGMENT_SHADER);
+				
+				//create program
+				glProgram = gl.createProgram();
+				
+				//attach and link shaders to the program
+                gl.attachShader(glProgram, vertexShader);
+                gl.attachShader(glProgram, fragmentShader);
+                gl.linkProgram(glProgram);
+
+                if (!gl.getProgramParameter(glProgram, gl.LINK_STATUS)) {
+                    alert("Unable to initialize the shader program.");
+                }
+				
+				//use program
+				gl.useProgram(glProgram);
+			}
+			
+			function makeShader(src, type)
+			{
+				//compile the vertex shader
+				var shader = gl.createShader(type);
+                gl.shaderSource(shader, src);
+                gl.compileShader(shader);
+
+                if (!gl.getShaderParameter(shader, gl.COMPILE_STATUS)) {
+                    alert("Error compiling shader: " + gl.getShaderInfoLog(shader));
+                }
+				return shader;
+			}
+			
+			function drawScene()
+			{
+				gl.bindBuffer(gl.ARRAY_BUFFER, trianglesVerticeBuffer);
+				gl.vertexAttribPointer(vertexPositionAttribute, 3, gl.FLOAT, false, 0, 0);
+
+				gl.bindBuffer(gl.ELEMENT_ARRAY_BUFFER, vertexIndexBuffer);
+				gl.drawElements(gl.TRIANGLES, vertexIndexBuffer.numItems, gl.UNSIGNED_SHORT, 0);
+			}
+
+            function createSquare(size){
+				size = (typeof size !== 'undefined') ? size : 1.0;
+
+				var vertexPositionData = [
+					0.0, 0.0, 0.0,
+					-size, -size, 0.0,
+					size, -size, 0.0,
+					size, size, 0.0,
+					-size,size, 0.0,  	
+				];
+
+				var indexData = [0,1,2,0,2,3,0,3,4,0,4,1];
+
+				trianglesVerticeBuffer = gl.createBuffer();
+				gl.bindBuffer(gl.ARRAY_BUFFER, trianglesVerticeBuffer);
+				gl.bufferData(gl.ARRAY_BUFFER, new Float32Array(vertexPositionData), gl.STATIC_DRAW);
+				trianglesVerticeBuffer.itemSize = 3;
+				trianglesVerticeBuffer.numItems = vertexPositionData.length / 3;
+
+				vertexIndexBuffer = gl.createBuffer();
+				gl.bindBuffer(gl.ELEMENT_ARRAY_BUFFER, vertexIndexBuffer);
+				gl.bufferData(gl.ELEMENT_ARRAY_BUFFER, new Uint16Array(indexData), gl.STREAM_DRAW);
+				vertexIndexBuffer.itemSize = 3;
+				vertexIndexBuffer.numItems = indexData.length;
+            }
+		</script>
+	</head>
+	<body onload="initWebGL()">
+		<canvas id="my-canvas" width="500" height="500">
+		Your browser does not support the HTML5 canvas element.
+		</canvas>		
+		<form id='fractal-options'>
+			<table border="0">
+				<tr>
+					<td>
+						<select id="sets">
+							<option value="mandelbrot">Mandelbrot</option>
+							<option value="julia">Julia</option>
+						</select>
+					</td>
+					<td>
+					</td>
+			</tr>
+			<tr>
+				<td>
+					<input type="submit" name="up" value="Up"/><br/>
+					<input type="submit" name="left" value="<-"/>
+					<input type="submit" name="right" value="->"/><br/>
+					<input type="submit" name="down" value="Down"/>
+				</td>
+				<td rowspan="2">
+					<textarea cols="30" rows="2" id="output-text">Offset: (0.00, 0.00)&#10;Zoom level: x1</textarea>
+			</tr>
+			<tr>
+				<td>
+					<input type="submit" name="zoom-in" value="Zoom in"/><br/>
+					<input type="submit" name="zoom-out" value="Zoom out"/>
+				</td>
+
+			</tr>
+			<tr>
+				<td>
+					C value: (<span id="c-value-label">0.00, 0.00</span>)<br/> 
+					Real: <input type="range" step="0.01" id="c-real" name="c-real" value="0.0" min="-2" max="2"/><br/> 
+					Imaginary: <input type="range" step="0.01" id="c-imaginary" name="c-imaginary" value="0.0" min="-2" max="2"/>
+				</td>
+				<td>
+					Color: (<span id="color-label">0.1, 0.1, 1.0</span>)<br/> 
+					R: <input type="range" step="0.1" class="color-slider" id="color-r" name="color-r" value="0.1" min="0.0" max="1.0"/><br/> 
+					G: <input type="range" step="0.1" class="color-slider" id="color-g" name="color-g" value="0.1" min="0.0" max="1.0"/><br/> 
+					B: <input type="range" step="0.1" class="color-slider" id="color-b" name="color-b" value="1.0" min="0.0" max="1.0"/><br/> 					
+					<br/><br/>
+					Lightness: <input type="range" step="1.0" class="color-slider" id="lightness" name="lightness" value="10.0" min="1.0" max="50.0"/> 		
+				</td>
+			</tr>
+			<tr>
+				<td colspan="2">
+					<input type="submit" name="reset" value="Reset"/>
+				</td>
+			</tr>
+		</form>
+	<script>
+	function resetUniformVariables()
+	{
+		c_seed = [0.0, 0.0];
+		zoom = 1.0;
+		offset = [0.0, 0.0];
+		julia = 0;
+		color = [0.1, 0.1, 1.0];
+		lightness = 10.0;
+	}	
+
+	function setColorLabel()
+	{
+		$("#color-label").html(color[0].toFixed(1) + ", " + color[1].toFixed(1) + ", " + color[2].toFixed(1));
+	}
+
+	function setCLabel()
+	{
+		$("#c-value-label").html(c_seed[0].toFixed(2) + ", " + c_seed[1].toFixed(2));
+	}
+
+	function setTextArea()
+	{
+		var zoom_reciprocal = 'MAX_ZOOM';
+		if(zoom > 0.00000000001)
+		{
+			zoom_reciprocal = 1.0/zoom;
+		}
+		var settings = "Offset: (" + offset[0].toFixed(2) + "," +offset[1].toFixed(2) + ")\n";
+		settings += "Zoom level: x" + zoom_reciprocal;
+		$("#output-text").html(settings) ;
+	}
+
+	$("#sets").change(function(){
+		if($(this).val() == "julia"){
+			julia = 1;
+		}else{
+			julia = 0;
+		}
+	});
+
+	$("#c-real, #c-imaginary").change(function(){
+		var range = $(this);
+		var value = parseFloat(range.val());
+		if(range.attr("id") == "c-real")
+		{
+			c_seed[0] = value;
+		}else if(range.attr("id") == "c-imaginary")
+		{
+			c_seed[1] = value;
+		}	
+		
+		setCLabel();
+	});
+
+	$(".color-slider").change(function(){
+		var range = $(this);
+		var value = parseFloat(range.val());
+		
+		if(range.attr("id") == "color-r")
+		{
+			color[0] = value;
+		}else if(range.attr("id") == "color-g")
+		{
+			color[1] = value;
+		}else if(range.attr("id") == "color-b")
+		{
+			color[2] = value;
+		}else if(range.attr("id") == "lightness")
+		{
+			lightness = value;
+		}		
+			
+			setColorLabel();
+		});
+
+	$("form").on("click", "input:submit", function(evt){
+		var name = $(this).attr("name");
+		
+		switch(name){
+			case 'up':
+				offset[1] += (0.1 * zoom);
+				break;
+			case 'down':
+				offset[1] -= (0.1 * zoom);
+				break;
+			case 'left':
+				offset[0] -= (0.1 * zoom);
+				break;
+			case 'right':
+				offset[0] += (0.1 * zoom);
+				break;
+			case 'zoom-in':
+				zoom /= 1.5;
+				break;
+			case 'zoom-out':
+				zoom *= 1.5;
+				break;	
+			case 'reset':
+				resetUniformVariables();
+				$("#c-real").val(0.00);
+				$("#c-imaginary").val(0.00);
+				$("#color-r").val(0.1);
+				$("#color-g").val(0.1);
+				$("#color-b").val(1.0);
+				$("#lightness").val(1.0);
+				$("#sets").val("mandebrot");				
+				setColorLabel();
+				setCLabel();
+				break;			
+			default:
+				break;			
+		}
+		
+		setTextArea();
+		evt.preventDefault();
+	});
+	</script>	
+	</body>
+</html>
