@@ -1,0 +1,58 @@
+<?xml version='1.0' encoding='UTF-8'?>
+<kml xmlns='http://earth.google.com/kml/2.1'>
+<Folder>
+    <name>model</name>
+    <description><![CDATA[Created with <a href="http://sketchup.google.com/">Google 3D Warehouse 1.0</a>]]></description>
+    <DocumentSource>SketchUp</DocumentSource>
+<visibility>1</visibility>
+<LookAt>
+<heading>36.6451</heading>
+<tilt>88.1722</tilt>
+<latitude>27.17501992773568</latitude>
+<longitude>78.04213040436298</longitude>
+<range>130.6447312875845</range>
+<altitude>21.99187390898444</altitude>
+</LookAt>
+<Folder>
+<name>Tour</name>
+<Placemark>
+<name><![CDATA[Taj mahal]]></name>
+<visibility>1</visibility>
+<LookAt>
+<heading>264.976</heading>
+<tilt>84.3757</tilt>
+<latitude>27.17499544401615</latitude>
+<longitude>78.04209016161592</longitude>
+<range>12.52752282082247</range>
+<altitude>0.1866255907544761</altitude>
+</LookAt>
+</Placemark>
+</Folder>
+  <Placemark>
+    <name>Model</name>
+    <description><![CDATA[]]></description>
+    <Style id='default'>
+    </Style>
+    <Model>
+        <altitudeMode>relativeToGround</altitudeMode>
+        <Location>
+            <longitude>78.042083816301</longitude>
+            <latitude>27.175034916775</latitude>
+            <altitude>0.000000000000</altitude>
+        </Location>
+        <Orientation>
+            <heading>-0.000000000000</heading>
+            <tilt>0</tilt>
+            <roll>0</roll>
+        </Orientation>
+        <Scale>
+            <x>1.0</x>
+            <y>1.0</y>
+            <z>1.0</z>
+        </Scale>
+        <Link>
+            <href>models/model.dae</href>
+        </Link>
+    </Model>
+  </Placemark></Folder>
+</kml>

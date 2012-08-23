@@ -1,0 +1,58 @@
+<?xml version='1.0' encoding='UTF-8'?>
+<kml xmlns='http://www.opengis.net/kml/2.2' xmlns:gx='http://www.google.com/kml/ext/2.2' xmlns:kml='http://www.opengis.net/kml/2.2' xmlns:atom='http://www.w3.org/2005/Atom'>
+<Folder>
+    <name>Orca</name>
+    <description><![CDATA[Created with <a href="http://sketchup.google.com/">Google SketchUp 7.0.10247</a>]]></description>
+    <DocumentSource>SketchUp</DocumentSource>
+<visibility>1</visibility>
+<LookAt>
+<heading>25.7798</heading>
+<tilt>69.8981</tilt>
+<latitude>40.01326345334976</latitude>
+<longitude>-105.2952641577342</longitude>
+<range>889.7413942367041</range>
+<altitude>318.9484685644434</altitude>
+</LookAt>
+<Folder>
+<name>Tour</name>
+<Placemark>
+<name><![CDATA[Scene 1]]></name>
+<visibility>1</visibility>
+<LookAt>
+<heading>25.7798</heading>
+<tilt>69.8981</tilt>
+<latitude>40.01326345334976</latitude>
+<longitude>-105.2952641577342</longitude>
+<range>889.7413942367041</range>
+<altitude>318.9484685644434</altitude>
+</LookAt>
+</Placemark>
+</Folder>
+  <Placemark>
+    <name>Model</name>
+    <description><![CDATA[]]></description>
+    <Style id='default'>
+    </Style>
+    <Model>
+        <altitudeMode>relativeToGround</altitudeMode>
+        <Location>
+            <longitude>-105.283000000000</longitude>
+            <latitude>40.017000000000</latitude>
+            <altitude>0.000000000000</altitude>
+        </Location>
+        <Orientation>
+            <heading>-0.000000000000</heading>
+            <tilt>0</tilt>
+            <roll>0</roll>
+        </Orientation>
+        <Scale>
+            <x>1.0</x>
+            <y>1.0</y>
+            <z>1.0</z>
+        </Scale>
+        <Link>
+            <href>models/Orca.dae</href>
+        </Link>
+    </Model>
+  </Placemark></Folder>
+</kml>
