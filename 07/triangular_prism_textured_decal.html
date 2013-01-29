@@ -226,7 +226,7 @@
 							s = triangleVertices[a*3];
 							t = triangleVertices[a*3 + 1];
 						}	
-						tex.push(new THREE.UV(s, t));
+						tex.push(new THREE.Vector2(s, t));
 					}
 					uvs.push(tex);
 					
