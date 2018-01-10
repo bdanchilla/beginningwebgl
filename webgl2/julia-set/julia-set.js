@@ -39,32 +39,10 @@ function setupWebGL() {
 }
 
 function initShaders() {
-    let vs_source = null, fs_source = null;
-    //get shader sources with jQuery Ajax
-    $.ajax({
-        async: false,
-        url: './julia-set.vs',
-        success: function (data) {
-            vs_source = data.firstChild.textContent;
-        },
-        dataType: 'xml'
-    });
-    $.ajax({
-        async: false,
-        url: './julia-set.fs',
-        success: function (data) {
-            console.log(data);
-            fs_source = data.firstChild.textContent;
-        },
-        fail: function (error) {
-            console.log(error);
-        },
-        dataType: 'xml'
-    });
     //compile shaders
-    vertexShader = makeShader(vs_source, gl.VERTEX_SHADER);
-    fragmentShader = makeShader(fs_source, gl.FRAGMENT_SHADER);
-    // console.log(vs_source, vertexShader, fs_source, fragmentShader);
+    vertexShader = makeShader(vsSource, gl.VERTEX_SHADER);
+    fragmentShader = makeShader(fsSource, gl.FRAGMENT_SHADER);
+
     //create program
     glProgram = gl.createProgram();
 

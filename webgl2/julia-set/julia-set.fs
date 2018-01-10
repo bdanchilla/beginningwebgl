@@ -1,4 +1,4 @@
-<script type="x-shader/x-fragment" id="vertex-fs">#version 300 es
+let fsSource = `#version 300 es
 in highp vec2 position;
 const int MAX_ITERATIONS = 150;
 const highp float LIGHTNESS_FACTOR = 2.0;
@@ -21,5 +21,4 @@ void main(void) {
         }
     }
     outputColor = color;
-}
-</script>
+}`;
